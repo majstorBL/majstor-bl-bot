@@ -15,6 +15,10 @@ function createSession() {
     deviceType: null,
     faultPattern: null,
     installType: null,
+    // DEVICES v2 contact block
+    phone: null, // mandatory — session closes if refused twice
+    name: null, // optional
+    phoneRefusedOnce: false, // tracks first phone refusal to allow one retry
     // INSTALLATIONS-only fields
     installationType: null,
     itemName: null,
@@ -31,7 +35,7 @@ function createSession() {
     description: null,
     location: null,
     photos: [],
-    contact: null,
+    contact: null, // used by INSTALLATIONS pre-refactor
   };
 }
 
@@ -137,10 +141,25 @@ function extractDeviceType(text) {
   const input = normalizeText(text);
 
   const deviceTypes = [
+    // Dishwasher must be checked before washing machine —
+    // "mašina za suđe" contains "mašina" which would otherwise match first
+    {
+      keywords: [
+        "sudomašina",
+        "mašina za suđe",
+        "perilica suđa",
+        "perilica posuđa",
+        "suđerica",
+        "suđe",
+        "dishwasher",
+      ],
+      type: "sudomašina",
+    },
     {
       keywords: [
         "veš mašina",
         "mašina za pranje",
+        "perilica rublja",
         "perilica",
         "veš",
         "mašina",
@@ -148,7 +167,6 @@ function extractDeviceType(text) {
       ],
       type: "veš mašina",
     },
-    { keywords: ["sudomašina", "suđe", "dishwasher"], type: "sudomašina" },
     { keywords: ["zamrzivač"], type: "zamrzivač" },
     { keywords: ["frižider", "hladnjak", "frizider"], type: "frižider" },
     { keywords: ["bojler", "boiler", "grijač"], type: "bojler" },
@@ -188,6 +206,25 @@ function isFurniture(text) {
   return furnitureKeywords.some((kw) => input.includes(kw));
 }
 
+// Returns a device-specific hint about where to find the model label
+function getModelHint(deviceType) {
+  const hints = {
+    "veš mašina": "Model se često nalazi na naljepnici unutar vrata bubnja.",
+    sudomašina: "Model se često nalazi na unutrašnjoj ivici vrata mašine.",
+    bojler: "Model se obično nalazi na prednjoj ili bočnoj strani uređaja.",
+    frižider: "Model se često nalazi unutar frižidera, na bočnom zidu.",
+    zamrzivač: "Model se obično nalazi na unutrašnjoj strani vrata.",
+    laptop: "Model se obično nalazi na naljepnici s donje strane.",
+    šporet: "Model se obično nalazi na naljepnici sa stražnje strane.",
+    televizor: "Model se obično nalazi na naljepnici s poleđine TV-a.",
+    računar: "Model se obično nalazi na naljepnici na kućištu računara.",
+  };
+  return (
+    hints[deviceType] ||
+    "Model možete naći na naljepnici uređaja ili računu o kupovini."
+  );
+}
+
 app.use(express.json());
 
 // Token must match what you set in Meta App Dashboard → Webhooks
@@ -218,6 +255,33 @@ function processMessage(userId, tekst) {
     session.state = "ASK_SERVICE";
     return "Bot: Zdravo! Koju uslugu trebate? Opišite ukratko šta Vam treba.";
   } else if (session.state === "ASK_SERVICE") {
+    // Greeting-only detection — stay in ASK_SERVICE and invite description
+    const inputLower = normalizeText(tekst);
+    const greetings = [
+      "zdravo",
+      "dobar dan",
+      "dobro jutro",
+      "dobar vecer",
+      "dobar vece",
+      "dobar večer",
+      "dobar veče",
+      "pozdrav",
+      "hej",
+      "hey",
+      "cao",
+      "ćao",
+      "ciao",
+      "alo",
+      "selam",
+    ];
+    const isGreetingOnly = greetings.some(
+      (g) =>
+        inputLower === g || inputLower === g + "!" || inputLower === g + ".",
+    );
+    if (isGreetingOnly) {
+      return "Bot: Dobar dan! Kako Vam možemo pomoći?";
+    }
+
     const branch = classifyBranch(tekst);
 
     if (branch === "UNKNOWN") {
@@ -238,18 +302,15 @@ function processMessage(userId, tekst) {
         // Device type already clear from first message — skip ASK_DEVICE_TYPE
         session.deviceType = detectedType;
         session.state = "ASK_BRAND";
-        return `Bot: Uređaj "${session.deviceType}" zabilježen. Koji je brend?`;
+        return `Bot: Dobro, vidim da se radi o uređaju ${session.deviceType}. Koji je brend (proizvođač)?`;
       }
 
       // Device type not clear — ask explicitly
       session.state = "ASK_DEVICE_TYPE";
-      return (
-        `Bot: Usluga "${session.service}" zabilježena. ` +
-        "Koji je tačno uređaj u pitanju? (npr. veš mašina, bojler, frižider, laptop)"
-      );
+      return "Bot: Koji je tačno uređaj u pitanju? (npr. veš mašina, bojler, frižider, laptop)";
     }
 
-    // INSTALLATIONS — start extended flow
+    // INSTALLATIONS — start extended flow (unchanged)
     session.state = "ASK_INSTALLATION_TYPE";
     return (
       `Bot: Usluga "${session.service}" zabilježena. ` +
@@ -258,51 +319,50 @@ function processMessage(userId, tekst) {
   } else if (session.state === "ASK_DEVICE_TYPE") {
     session.deviceType = tekst;
     session.state = "ASK_BRAND";
-    return `Bot: Uređaj "${session.deviceType}" zabilježen. Koji je brend?`;
+    return "Bot: Razumijem. Koji je brend (proizvođač) uređaja?";
   } else if (session.state === "ASK_BRAND") {
     session.brand = tekst;
     session.state = "ASK_MODEL";
-    return `Bot: Brend ${session.brand} zabilježen. Koji je model?`;
+    const modelHint = getModelHint(session.deviceType);
+    return `Bot: Hvala. Koji je model uređaja? ${modelHint}`;
   } else if (session.state === "ASK_MODEL") {
     session.model = tekst;
     session.state = "ASK_DESCRIPTION";
-    return `Bot: Model ${session.model} zabilježen. Opišite problem.`;
+    return "Bot: Dobro. Opišite nam problem — šta se tačno dešava sa uređajem?";
   } else if (session.state === "ASK_DESCRIPTION") {
     session.description = tekst;
 
     if (session.branch === "DEVICES") {
       session.state = "ASK_FAULT_PATTERN";
-      return (
-        `Bot: Problem "${session.description}" zabilježen. ` +
-        "Da li se problem javlja stalno ili povremeno?"
-      );
+      return "Bot: Razumijem. Da li se problem javlja stalno ili povremeno?";
     }
 
-    // INSTALLATIONS
+    // INSTALLATIONS — unchanged
     session.state = "ASK_LOCATION";
     return `Bot: Problem "${session.description}" zabilježen. Koja je Vaša lokacija?`;
   } else if (session.state === "ASK_FAULT_PATTERN") {
     session.faultPattern = tekst;
-    session.state = "ASK_LOCATION";
-    return `Bot: "${session.faultPattern}" zabilježeno. Koja je Vaša lokacija?`;
+    // DEVICES v2: go directly to install-type question; location moved to contact block
+    session.state = "ASK_INSTALL_TYPE";
+    return "Bot: Dobro. Da li je uređaj ugradbeni ili samostojeći, i u kojem dijelu prostora se nalazi? (npr. kuhinja, kupatilo, ostava)";
   } else if (session.state === "ASK_LOCATION") {
-    session.location = tekst;
-
     if (session.branch === "DEVICES") {
-      session.state = "ASK_INSTALL_TYPE";
-      return (
-        `Bot: Lokacija "${session.location}" zabilježena. ` +
-        "Da li je uređaj ugradbeni ili samostojeći?"
-      );
+      // DEVICES v2 — optional contact block step; "dalje" skips address collection
+      if (normalizeText(tekst) !== "dalje") {
+        session.location = tekst;
+      }
+      session.state = "ASK_NAME";
+      return "Bot: Na koje ime da evidentiramo zahtjev? Ako ne želite, napišite Dalje.";
     }
 
-    // INSTALLATIONS
+    // INSTALLATIONS — unchanged
+    session.location = tekst;
     session.state = "ASK_FLOOR";
     return `Bot: Lokacija "${session.location}" zabilježena. Koji je sprat i da li postoji lift?`;
   } else if (session.state === "ASK_INSTALL_TYPE") {
     session.installType = tekst;
     session.state = "ASK_PHOTOS";
-    return `Bot: "${session.installType}" zabilježeno. Pošaljite fotografiju kvara ili uređaja.`;
+    return "Bot: Hvala. Ako želite, možete nam poslati fotografiju uređaja, mjesta kvara ili naljepnice sa modelom (maksimalno 2 fotografije). Ako nemate fotografiju, napišite Dalje.";
   } else if (session.state === "ASK_INSTALLATION_TYPE") {
     session.installationType = tekst;
     session.state = "ASK_ITEM_NAME";
@@ -353,6 +413,12 @@ function processMessage(userId, tekst) {
     );
   } else if (session.state === "ASK_PHOTOS") {
     if (normalizeText(tekst) === "dalje") {
+      if (session.branch === "DEVICES") {
+        // DEVICES v2 — move to confirmation before contact block
+        session.state = "ASK_CONFIRMATION";
+        return "Bot: Hvala na informacijama. Da li želite da Vas naš serviser kontaktira radi dogovora termina posjete i popravke uređaja? (da/ne)";
+      }
+      // INSTALLATIONS — pre-refactor path unchanged
       session.state = "ASK_CONTACT";
       return "Bot: Ostavite vaš kontakt telefon.";
     }
@@ -364,6 +430,84 @@ function processMessage(userId, tekst) {
     // Text in ASK_PHOTOS is NOT a photo — photos only arrive as attachments via POST /webhook.
     // Any other text: remind the user to send a photo or write Dalje.
     return "Bot: Ako želite, pošaljite fotografiju. Ako nemate fotografiju, napišite Dalje.";
+
+    // ── DEVICES v2 — contact block ─────────────────────────────────────────────
+  } else if (session.state === "ASK_CONFIRMATION") {
+    // User decides whether they want the technician to contact them
+    const confirmAnswer = normalizeText(tekst);
+    const isYes = [
+      "da",
+      "može",
+      "hocu",
+      "hoću",
+      "naravno",
+      "ok",
+      "svakako",
+      "jeste",
+    ].some(
+      (w) =>
+        confirmAnswer === w ||
+        confirmAnswer.startsWith(w + " ") ||
+        confirmAnswer.includes(w),
+    );
+    if (isYes) {
+      session.state = "ASK_PHONE";
+      return "Bot: Molimo Vas pošaljite broj telefona na koji Vas serviser može kontaktirati.";
+    }
+    // Negative answer — close politely
+    session.state = "END";
+    return "Bot: U redu. Hvala Vam što ste nas kontaktirali. Sretno!";
+  } else if (session.state === "ASK_PHONE") {
+    // Phone is mandatory; allow one retry if user refuses before closing session
+    const hasDigit = /\d/.test(tekst);
+    const phoneAnswer = normalizeText(tekst);
+    const refusalWords = ["ne", "nema", "neću", "ne dam", "nemam"];
+    const isRefusal =
+      !hasDigit &&
+      refusalWords.some(
+        (w) =>
+          phoneAnswer === w ||
+          phoneAnswer.startsWith(w + " ") ||
+          phoneAnswer === w + ".",
+      );
+
+    if (isRefusal) {
+      if (!session.phoneRefusedOnce) {
+        session.phoneRefusedOnce = true;
+        return "Bot: Razumijem, ali broj telefona je potreban da bi Vas serviser mogao kontaktirati. Molimo pošaljite broj telefona.";
+      }
+      // Second refusal — close politely
+      session.state = "END";
+      return "Bot: Razumijemo Vaš stav. Hvala Vam što ste nas kontaktirali. Sretno!";
+    }
+
+    session.phone = tekst;
+    session.state = "ASK_LOCATION";
+    return "Bot: Možete li poslati adresu ili lokaciju gdje se uređaj nalazi? Ako ne želite tačnu adresu, napišite samo naselje ili dio grada. Ako želite preskočiti, napišite Dalje.";
+  } else if (session.state === "ASK_NAME") {
+    // Optional — "dalje" skips name; summary is generated immediately after
+    if (normalizeText(tekst) !== "dalje") {
+      session.name = tekst;
+    }
+    session.state = "END";
+
+    const photoCount = session.photos.length;
+    return `Bot: Hvala Vam! Vaš zahtjev je primljen.
+
+--- REZIME ---
+Uređaj: ${session.deviceType || session.service}
+Brend: ${session.brand}
+Model: ${session.model}
+Problem: ${session.description}
+Učestalost kvara: ${session.faultPattern}
+Tip/lokacija uređaja: ${session.installType}
+Broj fotografija: ${photoCount}
+Telefon: ${session.phone}
+Lokacija/adresa: ${session.location || "—"}
+Ime: ${session.name || "—"}
+----------------
+
+Naš serviser će Vas kontaktirati u najkraćem roku!`;
   } else if (session.state === "ASK_CONTACT") {
     session.contact = tekst;
     session.state = "CONFIRM_REQUEST";

@@ -361,9 +361,9 @@ function processMessage(userId, tekst) {
       return "Bot: Primili smo maksimalan broj fotografija (2). Napišite 'dalje' za nastavak.";
     }
 
-    session.photos.push(tekst);
-
-    return "Bot: Fotografija primljena. Ako imate još, pošaljite. Ako ne, napišite 'dalje'.";
+    // Text in ASK_PHOTOS is NOT a photo — photos only arrive as attachments via POST /webhook.
+    // Any other text: remind the user to send a photo or write Dalje.
+    return "Bot: Ako želite, pošaljite fotografiju. Ako nemate fotografiju, napišite Dalje.";
   } else if (session.state === "ASK_CONTACT") {
     session.contact = tekst;
     session.state = "CONFIRM_REQUEST";
@@ -477,26 +477,147 @@ app.get("/webhook", (req, res) => {
 
 // ── Incoming Messenger events endpoint ────────────────────────────────────
 // Meta sends all Messenger events here via POST.
-// We acknowledge receipt immediately, then parse and process each message.
+// res.send() is called AFTER the forEach so that all sendMessengerReply()
+// calls are initiated before Render's proxy closes the inbound connection.
 app.post("/webhook", (req, res) => {
-  // Always return 200 immediately — Meta will retry if we don't acknowledge fast
-  res.status(200).send("EVENT_RECEIVED");
+  // DEBUG [4a]: confirm every Meta call reaches this handler
+  console.log("[webhook] POST /webhook hit");
 
   const body = req.body;
 
-  // Only process events from a Facebook Page subscription
-  if (body.object !== "page") return;
+  // DEBUG [4a]: shows whether Meta labelled this as a page subscription event
+  console.log("[webhook] body.object:", body?.object);
+
+  // Non-page events (e.g. Instagram) — acknowledge and stop immediately
+  if (body.object !== "page") {
+    res.status(200).send("EVENT_RECEIVED");
+    return;
+  }
 
   // Messenger payloads are structured as: body.entry[].messaging[]
   body.entry?.forEach((entry) => {
     entry.messaging?.forEach((event) => {
       const senderId = event.sender?.id;
 
-      // Extract text from the message — undefined for photos, stickers, etc.
+      // Log and skip non-message events (delivery receipts, read receipts, reactions)
+      if (!event.message) {
+        const eventType = event.delivery
+          ? "delivery"
+          : event.read
+            ? "read"
+            : event.reaction
+              ? "reaction"
+              : "unknown";
+        console.log(
+          `[webhook] non-message event from ${senderId}: ${eventType} — skipped`,
+        );
+        return;
+      }
+
+      // DEBUG [4a]: log the raw event shape before any type checks
+      console.log(`[webhook] event — senderId: ${senderId}`);
+      console.log(
+        `[webhook] event.message keys: [${Object.keys(event.message || {}).join(", ")}]`,
+      );
+      const dbgHasAttachments = Array.isArray(event.message?.attachments);
+      console.log(`[webhook] has attachments: ${dbgHasAttachments}`);
+      if (dbgHasAttachments) {
+        const dbgTypes = event.message.attachments
+          .map((a) => a.type)
+          .join(", ");
+        console.log(`[webhook] attachment types: ${dbgTypes}`);
+      }
+
+      if (!senderId) return;
+
+      const attachments = event.message?.attachments;
       const text = event.message?.text;
 
-      // Skip non-text events (photos, reactions, delivery receipts, etc.)
-      if (!senderId || !text) return;
+      // ── Image/attachment handling ──────────────────────────────────────
+      // If the event contains attachments, handle them and skip text processing.
+      // Messenger sends photos as attachments with type "image".
+      if (attachments && attachments.length > 0) {
+        // Ensure a session exists for this user
+        if (!sessions[senderId]) {
+          sessions[senderId] = createSession();
+        }
+        const session = sessions[senderId];
+
+        let imageCount = 0; // how many image attachments were in this event
+        let storedCount = 0; // how many we actually saved (respecting the 2-photo cap)
+        let nonImageCount = 0;
+
+        for (const attachment of attachments) {
+          if (attachment.type !== "image") {
+            nonImageCount++;
+            console.log(
+              `Non-image attachment from ${senderId}: type="${attachment.type}" — ignored.`,
+            );
+            continue;
+          }
+
+          imageCount++;
+          const imageUrl = attachment.payload?.url;
+
+          if (!imageUrl) {
+            console.log(
+              `Image attachment from ${senderId} has no URL — skipped.`,
+            );
+            continue;
+          }
+
+          console.log(`Image received from ${senderId}: ${imageUrl}`);
+
+          if (session.photos.length < 2) {
+            session.photos.push(imageUrl);
+            storedCount++;
+          }
+        }
+
+        // Send one reply summarising the result of this attachment event
+        if (imageCount > 0) {
+          if (storedCount > 0 && session.photos.length < 2) {
+            // Photo accepted, slot still open
+            console.log(
+              `[webhook] → sendMessengerReply: photo accepted, slot open`,
+            );
+            sendMessengerReply(
+              senderId,
+              "Fotografija je primljena. Možete poslati još jednu fotografiju ili napišite Dalje.",
+            );
+          } else if (storedCount > 0 && session.photos.length >= 2) {
+            // Photo accepted, now at the cap
+            console.log(
+              `[webhook] → sendMessengerReply: photo accepted, cap reached`,
+            );
+            sendMessengerReply(
+              senderId,
+              "Fotografija je primljena. Primili smo maksimalan broj fotografija. Molimo napišite Dalje za nastavak.",
+            );
+          } else {
+            // Already at cap before this event — nothing stored
+            console.log(`[webhook] → sendMessengerReply: already at cap`);
+            sendMessengerReply(
+              senderId,
+              "Primili smo maksimalan broj fotografija. Molimo napišite Dalje za nastavak.",
+            );
+          }
+        } else if (nonImageCount > 0) {
+          // Event had attachments but none were images (video, audio, file, sticker…)
+          console.log(`[webhook] → sendMessengerReply: non-image rejected`);
+          sendMessengerReply(
+            senderId,
+            "Trenutno možemo primiti samo fotografije. Molimo pošaljite fotografiju ili napišite Dalje.",
+          );
+        }
+
+        // Do not advance the text flow in the same event as an attachment
+        return;
+      }
+
+      // ── Text message handling ──────────────────────────────────────────
+      // No attachments — process as a regular text message.
+      if (!text) return; // delivery receipts, read receipts, reactions, etc.
 
       console.log(`Messenger message from ${senderId}: ${text}`);
 
@@ -506,9 +627,15 @@ app.post("/webhook", (req, res) => {
       // Strip the "Bot: " prefix — it is only for the browser testing endpoint
       const messengerText = reply.trim().replace(/^Bot:\s*/, "");
 
+      console.log(`[webhook] → sendMessengerReply: text reply to ${senderId}`);
       sendMessengerReply(senderId, messengerText);
     });
   });
+
+  // Acknowledge receipt AFTER all processing and sendMessengerReply() calls.
+  // This ensures outbound reply requests are queued before the proxy closes
+  // the inbound connection — fixing the delayed-reply issue with attachments.
+  res.status(200).send("EVENT_RECEIVED");
 });
 
 // ── Testing routes (browser-based, temporary) ─────────────────────────────

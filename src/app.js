@@ -56,6 +56,7 @@ function classifyBranch(text) {
     "pranje",
     "suđe",
     "sudomašina",
+    "sudomasina",
     "dishwasher",
     "frižider",
     "hladnjak",
@@ -146,11 +147,22 @@ function extractDeviceType(text) {
     {
       keywords: [
         "sudomašina",
+        "sudomasina",
         "mašina za suđe",
+        "mašina za suđa",
+        "mašina za pranje suđa",
+        "mašina za pranje posuđa",
+        "masina za sudja",
+        "masina za posudja",
         "perilica suđa",
         "perilica posuđa",
         "suđerica",
+        "sudjerica",
         "suđe",
+        "suđa",
+        "sudja",
+        "posuđa",
+        "posudja",
         "dishwasher",
       ],
       type: "sudomašina",
@@ -233,6 +245,66 @@ const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || "majstor_bl_verify_token";
 // Facebook page token — set in Render environment variables, never hardcode
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN;
 
+// ── ASK_SERVICE logic — shared by START and ASK_SERVICE states ────────────
+// Extracted so the first user message is processed immediately without forcing
+// the user to repeat themselves after the initial greeting.
+function handleAskService(session, tekst) {
+  const inputLower = normalizeText(tekst);
+  const greetings = [
+    "zdravo",
+    "dobar dan",
+    "dobro jutro",
+    "dobar vecer",
+    "dobar vece",
+    "dobar večer",
+    "dobar veče",
+    "pozdrav",
+    "hej",
+    "hey",
+    "cao",
+    "ćao",
+    "ciao",
+    "alo",
+    "selam",
+  ];
+  const isGreetingOnly = greetings.some(
+    (g) => inputLower === g || inputLower === g + "!" || inputLower === g + ".",
+  );
+  if (isGreetingOnly) {
+    return "Bot: Dobar dan! Kako Vam možemo pomoći?";
+  }
+
+  const branch = classifyBranch(tekst);
+
+  if (branch === "UNKNOWN") {
+    return (
+      "Bot: Nisam siguran o kakvoj se usluzi radi. Možete li precizirati? " +
+      "Npr: 'popravka veš mašine', 'montaža ormara', 'zamjena slavine', 'ugradnja utičnice'."
+    );
+  }
+
+  session.service = tekst;
+  session.branch = branch;
+
+  if (branch === "DEVICES") {
+    const detectedType = extractDeviceType(tekst);
+    if (detectedType) {
+      session.deviceType = detectedType;
+      session.state = "ASK_BRAND";
+      return `Bot: Dobro, vidim da se radi o uređaju ${session.deviceType}. Koji je brend (proizvođač)?`;
+    }
+    session.state = "ASK_DEVICE_TYPE";
+    return "Bot: Koji je tačno uređaj u pitanju? (npr. veš mašina, bojler, frižider, laptop)";
+  }
+
+  // INSTALLATIONS — unchanged
+  session.state = "ASK_INSTALLATION_TYPE";
+  return (
+    `Bot: Usluga "${session.service}" zabilježena. ` +
+    "O kojoj vrsti usluge se radi? (npr. montaža namještaja, električne instalacije, vodovod, ugradnja uređaja)"
+  );
+}
+
 // ── Core chatbot logic ─────────────────────────────────────────────────────
 // Receives a userId and the user's text, runs it through the state machine,
 // and returns the bot's reply as a string (with "Bot: " prefix).
@@ -253,69 +325,14 @@ function processMessage(userId, tekst) {
 
   if (session.state === "START") {
     session.state = "ASK_SERVICE";
-    return "Bot: Zdravo! Koju uslugu trebate? Opišite ukratko šta Vam treba.";
+    // Empty first call (e.g. /next with no tekst) — return the standard opening
+    if (normalizeText(tekst) === "") {
+      return "Bot: Zdravo! Koju uslugu trebate? Opišite ukratko šta Vam treba.";
+    }
+    // First message contains real content — process immediately so user doesn't repeat
+    return handleAskService(session, tekst);
   } else if (session.state === "ASK_SERVICE") {
-    // Greeting-only detection — stay in ASK_SERVICE and invite description
-    const inputLower = normalizeText(tekst);
-    const greetings = [
-      "zdravo",
-      "dobar dan",
-      "dobro jutro",
-      "dobar vecer",
-      "dobar vece",
-      "dobar večer",
-      "dobar veče",
-      "pozdrav",
-      "hej",
-      "hey",
-      "cao",
-      "ćao",
-      "ciao",
-      "alo",
-      "selam",
-    ];
-    const isGreetingOnly = greetings.some(
-      (g) =>
-        inputLower === g || inputLower === g + "!" || inputLower === g + ".",
-    );
-    if (isGreetingOnly) {
-      return "Bot: Dobar dan! Kako Vam možemo pomoći?";
-    }
-
-    const branch = classifyBranch(tekst);
-
-    if (branch === "UNKNOWN") {
-      // Stay in ASK_SERVICE and ask the user to clarify
-      return (
-        "Bot: Nisam siguran o kakvoj se usluzi radi. Možete li precizirati? " +
-        "Npr: 'popravka veš mašine', 'montaža ormara', 'zamjena slavine', 'ugradnja utičnice'."
-      );
-    }
-
-    session.service = tekst;
-    session.branch = branch;
-
-    if (branch === "DEVICES") {
-      const detectedType = extractDeviceType(tekst);
-
-      if (detectedType) {
-        // Device type already clear from first message — skip ASK_DEVICE_TYPE
-        session.deviceType = detectedType;
-        session.state = "ASK_BRAND";
-        return `Bot: Dobro, vidim da se radi o uređaju ${session.deviceType}. Koji je brend (proizvođač)?`;
-      }
-
-      // Device type not clear — ask explicitly
-      session.state = "ASK_DEVICE_TYPE";
-      return "Bot: Koji je tačno uređaj u pitanju? (npr. veš mašina, bojler, frižider, laptop)";
-    }
-
-    // INSTALLATIONS — start extended flow (unchanged)
-    session.state = "ASK_INSTALLATION_TYPE";
-    return (
-      `Bot: Usluga "${session.service}" zabilježena. ` +
-      "O kojoj vrsti usluge se radi? (npr. montaža namještaja, električne instalacije, vodovod, ugradnja uređaja)"
-    );
+    return handleAskService(session, tekst);
   } else if (session.state === "ASK_DEVICE_TYPE") {
     session.deviceType = tekst;
     session.state = "ASK_BRAND";
@@ -326,7 +343,18 @@ function processMessage(userId, tekst) {
     const modelHint = getModelHint(session.deviceType);
     return `Bot: Hvala. Koji je model uređaja? ${modelHint}`;
   } else if (session.state === "ASK_MODEL") {
-    session.model = tekst;
+    const modelUnknown = [
+      "ne znam",
+      "neznam",
+      "ne znam model",
+      "nemam",
+      "nisam siguran",
+      "nisam sigurna",
+    ];
+    const isUnknown = modelUnknown.some((u) =>
+      normalizeText(tekst).includes(u),
+    );
+    session.model = isUnknown ? "nepoznat" : tekst;
     session.state = "ASK_DESCRIPTION";
     return "Bot: Dobro. Opišite nam problem — šta se tačno dešava sa uređajem?";
   } else if (session.state === "ASK_DESCRIPTION") {

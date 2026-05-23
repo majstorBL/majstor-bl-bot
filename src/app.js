@@ -218,6 +218,28 @@ function isFurniture(text) {
   return furnitureKeywords.some((kw) => input.includes(kw));
 }
 
+// Returns the instrumental (BHS "sa + instrumental") form of a device name
+function getDeviceInstrumental(deviceType) {
+  const forms = {
+    bojler: "bojlerom",
+    frižider: "frižiderom",
+    zamrzivač: "zamrzivačem",
+    sudomašina: "sudomašinom",
+    "veš mašina": "veš mašinom",
+    televizor: "televizorom",
+    računar: "računarom",
+    laptop: "laptopom",
+    monitor: "monitorom",
+    usisivač: "usisivačem",
+    mikser: "mikserom",
+    blender: "blenderom",
+    pegla: "peglom",
+    "klima uređaj": "klima uređajem",
+    šporet: "šporetom",
+  };
+  return forms[deviceType] || deviceType;
+}
+
 // Returns a device-specific hint about where to find the model label
 function getModelHint(deviceType) {
   const hints = {
@@ -304,7 +326,8 @@ function handleAskService(session, tekst) {
     if (detectedType) {
       session.deviceType = detectedType;
       session.state = "ASK_BRAND";
-      return `Bot: Dobro, vidim da imate problem sa ${session.deviceType}. Da bismo Vas što prije spojili sa serviserom, trebam još nekoliko informacija. Koji je brend (proizvođač)?`;
+      const deviceText = getDeviceInstrumental(session.deviceType);
+      return `Bot: Dobro, vidim da imate problem sa ${deviceText}. Da bismo Vas što prije spojili sa serviserom, trebam još nekoliko informacija. Koji je brend (proizvođač)?`;
     }
     session.state = "ASK_DEVICE_TYPE";
     return "Bot: Koji je tačno uređaj u pitanju? (npr. veš mašina, bojler, frižider, laptop)";

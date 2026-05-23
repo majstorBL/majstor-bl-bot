@@ -270,7 +270,20 @@ function handleAskService(session, tekst) {
   const isGreetingOnly = greetings.some(
     (g) => inputLower === g || inputLower === g + "!" || inputLower === g + ".",
   );
-  if (isGreetingOnly) {
+  const contactIntentPhrases = [
+    "kako da vas kontaktiram",
+    "kako da vam se javim",
+    "kako se možemo čuti",
+    "kako se mozemo cuti",
+    "kako da se čujemo",
+    "kako da se cujemo",
+    "kako da kontaktiram",
+    "kako kontaktirati",
+  ];
+  const isContactIntent = contactIntentPhrases.some((p) =>
+    inputLower.includes(p),
+  );
+  if (isGreetingOnly || isContactIntent) {
     return "Bot: Dobar dan! Kako Vam možemo pomoći?";
   }
 
@@ -291,7 +304,7 @@ function handleAskService(session, tekst) {
     if (detectedType) {
       session.deviceType = detectedType;
       session.state = "ASK_BRAND";
-      return `Bot: Dobro, vidim da se radi o uređaju ${session.deviceType}. Koji je brend (proizvođač)?`;
+      return `Bot: Dobro, vidim da imate problem sa ${session.deviceType}. Da bismo Vas što prije spojili sa serviserom, trebam još nekoliko informacija. Koji je brend (proizvođač)?`;
     }
     session.state = "ASK_DEVICE_TYPE";
     return "Bot: Koji je tačno uređaj u pitanju? (npr. veš mašina, bojler, frižider, laptop)";

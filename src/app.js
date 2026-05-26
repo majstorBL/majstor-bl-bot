@@ -66,6 +66,8 @@ function classifyBranch(text) {
     "postavljanj",
     "zamijen",
     "zamjen",
+    "priključ",
+    "prikljuc",
     "slavin",
     "česm",
     "cesm",
@@ -75,6 +77,16 @@ function classifyBranch(text) {
     "prekidac",
     "luster",
     "plafonjer",
+    "vodokotlić",
+    "vodokotlic",
+    "wc kotlić",
+    "wc kotlic",
+    "fleks crijev",
+    "fleksibiln",
+    "lavabo",
+    "umivaonik",
+    "rasvjetn",
+    "grlo sijal",
   ];
   for (const kw of installationIntent) {
     if (input.includes(kw)) return "INSTALLATIONS";
@@ -297,7 +309,29 @@ function getModelHint(deviceType) {
 function extractInstallationType(text) {
   const input = normalizeText(text);
 
-  // B4 — device installation: device name + install intent
+  // [polish] B3-priority items — endpoint plumbing fittings. If any appears,
+  // classify as B3 even when a device name (e.g. bojler) is also mentioned
+  // — the work is on the fitting, not the device.
+  const b3PriorityKeywords = [
+    "slavin",
+    "česm",
+    "cesm",
+    "ventil",
+    "sifon",
+    "vodokotlić",
+    "vodokotlic",
+    "wc kotlić",
+    "wc kotlic",
+    "tuš baterij",
+    "tus baterij",
+    "fleksibiln",
+    "fleks crijev",
+    "lavabo",
+    "umivaonik",
+  ];
+  if (b3PriorityKeywords.some((w) => input.includes(w))) return "B3";
+
+  // B4 — device installation/connection: device name + install/connection intent
   const installIntent = [
     "ugradnj",
     "ugradi",
@@ -306,28 +340,47 @@ function extractInstallationType(text) {
     "instalacij",
     "kupio",
     "kupili",
+    "kupila",
     "kupljen",
     "planiram",
+    "priključ",
+    "prikljuc",
+    "spoji",
+    "povez",
+    "zamijen",
+    "zamjen",
   ];
   const devices = [
     "bojler",
     "šporet",
+    "sporet",
     "stednjak",
     "štednjak",
+    "električni šporet",
+    "elektricni sporet",
     "ploča",
     "ploca",
+    "ugradbena ploč",
+    "ugradbena ploc",
+    "sudomašin",
+    "sudomasin",
+    "mašina za suđe",
+    "masina za sudje",
+    "veš mašin",
+    "ves masin",
     "mašin",
     "masin",
     "klima",
     "zamrziv",
     "frižider",
     "frizider",
+    "napa",
   ];
   const hasInstall = installIntent.some((w) => input.includes(w));
   const hasDevice = devices.some((w) => input.includes(w));
   if (hasInstall && hasDevice) return "B4";
 
-  // B3 — plumbing (external components only)
+  // B3 — minor plumbing (visible/end-point components only)
   const b3Keywords = [
     "slavin",
     "česm",
@@ -337,25 +390,40 @@ function extractInstallationType(text) {
     "toalet",
     "tuš baterij",
     "tus baterij",
+    "vodokotlić",
+    "vodokotlic",
+    "wc kotlić",
+    "wc kotlic",
+    "kotlić",
+    "kotlic",
+    "fleksibiln",
+    "fleks crijev",
+    "fleks crijevo",
+    "crijev",
+    "lavabo",
+    "umivaonik",
     "vodovod",
     "cijev",
-    "crijev",
     "odvod",
   ];
   if (b3Keywords.some((w) => input.includes(w))) return "B3";
 
-  // B2 — electrical installations
+  // B2 — minor electrical (visible/end-point items only)
   const b2Keywords = [
     "utičnic",
     "uticnic",
     "prekidač",
     "prekidac",
     "rasvjet",
+    "rasvjetn",
     "luster",
     "plafonjer",
     "lampa",
     "svjetiljk",
     "reflektor",
+    "grlo sijal",
+    "grlo",
+    "sijalic",
     "tv nosač",
     "tv nosac",
     "električn",
@@ -389,29 +457,59 @@ function extractInstallationType(text) {
 function extractInstallationItem(text) {
   const input = normalizeText(text);
 
-  // Multi-word items first to avoid partial matches.
+  // Multi-word / specific items first so they win over generic stems.
   const items = [
     { keywords: ["tv nosač", "tv nosac"], item: "TV nosač" },
     { keywords: ["tuš baterij", "tus baterij"], item: "tuš baterija" },
     { keywords: ["radni sto"], item: "radni sto" },
+    {
+      keywords: ["fleksibilna crijev", "fleksibilno crijev", "fleks crijev"],
+      item: "fleksibilna crijeva",
+    },
+    {
+      keywords: [
+        "vodokotlić",
+        "vodokotlic",
+        "wc kotlić",
+        "wc kotlic",
+        "kotlić",
+        "kotlic",
+      ],
+      item: "vodokotlić",
+    },
+    { keywords: ["ugradbena ploč", "ugradbena ploc"], item: "ugradbena ploča" },
+    {
+      keywords: ["električni šporet", "elektricni sporet"],
+      item: "električni šporet",
+    },
+    { keywords: ["grlo sijal"], item: "grlo sijalice" },
+    { keywords: ["rasvjetno tijel", "rasvjetn"], item: "rasvjetno tijelo" },
+    {
+      keywords: ["sudomašin", "sudomasin", "mašina za suđe", "masina za sudje"],
+      item: "sudomašina",
+    },
+    { keywords: ["veš mašin", "ves masin"], item: "veš mašina" },
     { keywords: ["ogledalo"], item: "ogledalo" },
     { keywords: ["luster"], item: "luster" },
     { keywords: ["plafonjer"], item: "plafonjera" },
     { keywords: ["reflektor"], item: "reflektor" },
     { keywords: ["lampa"], item: "lampa" },
     { keywords: ["svjetiljk"], item: "svjetiljka" },
+    { keywords: ["sijalic"], item: "sijalica" },
     { keywords: ["utičnic", "uticnic"], item: "utičnica" },
     { keywords: ["prekidač", "prekidac"], item: "prekidač" },
     { keywords: ["slavin"], item: "slavina" },
     { keywords: ["česm", "cesm"], item: "česma" },
     { keywords: ["ventil"], item: "ventil" },
     { keywords: ["sifon"], item: "sifon" },
+    { keywords: ["crijev"], item: "crijevo" },
+    { keywords: ["lavabo"], item: "lavabo" },
+    { keywords: ["umivaonik"], item: "umivaonik" },
+    { keywords: ["napa"], item: "napa" },
     { keywords: ["bojler"], item: "bojler" },
-    { keywords: ["šporet"], item: "šporet" },
     { keywords: ["štednjak"], item: "štednjak" },
+    { keywords: ["šporet", "sporet"], item: "šporet" },
     { keywords: ["ploča", "ploca"], item: "ploča" },
-    { keywords: ["sudomašin", "sudomasin"], item: "sudomašina" },
-    { keywords: ["veš mašin", "ves masin"], item: "veš mašina" },
     { keywords: ["mašin", "masin"], item: "mašina" },
     { keywords: ["klima"], item: "klima uređaj" },
     { keywords: ["zamrziv"], item: "zamrzivač" },
@@ -545,81 +643,333 @@ function parseItemReadyAndCondition(text) {
   return { itemReady, itemCondition };
 }
 
-// Returns the next-step prompt + state for INSTALLATIONS after work-readiness
-// step. Used by both ASK_WORK_READY and ASK_MODEL (when B4 + itemReady=true).
-function nextAfterInstallationsCore(session) {
-  const wallOrCeiling =
-    session.mountingMode === "wall" || session.mountingMode === "ceiling";
-  if (session.installationType === "B1" || wallOrCeiling) {
-    session.state = "ASK_DIMENSIONS";
-    if (session.installationType === "B1") {
-      return "Bot: Razumijem. Koje su dimenzije predmeta? (širina x visina x dubina)";
-    }
-    return "Bot: Razumijem. Koje su dimenzije ili težina predmeta koji se montira?";
-  }
-  session.state = "ASK_FLOOR";
-  return "Bot: Razumijem. Na kojem spratu se obavljaju radovi i da li postoji lift?";
+// ── [4c-UX-polish] Out-of-scope detectors for B2/B3 major jobs ───────────
+
+// Plumbing requests outside our scope (clogged pipes, drain unclogging,
+// in-wall pipework, sewer, new water installation). Returns true if any
+// trigger appears in the user text.
+function detectOutOfScopePlumbing(text) {
+  const t = normalizeText(text);
+  const triggers = [
+    "začepljen",
+    "zacepljen",
+    "odštopavanj",
+    "odstopavanj",
+    "odštopa",
+    "odstopa",
+    "kanalizacij",
+    "pukla cijev",
+    "pucanj cijev",
+    "pucanje cijev",
+    "mijenjanj cijev",
+    "izmjena cijev",
+    "zamjena cijev u zidu",
+    "cijev u zidu",
+    "nova vodovodna instalacij",
+    "nova vodovodna",
+  ];
+  return triggers.some((p) => t.includes(p));
 }
 
-// Returns the next-step prompt + state after ASK_ACCESS / when access step
-// is skipped (B1 furniture without wall mounting).
-function nextAfterAccessForInstallations(session) {
-  session.state = "ASK_WORK_READY";
-  return "Bot: Hvala. Da li je prostor pripremljen za rad? (stari predmet uklonjen, površina slobodna, mjesto pristupačno)";
+// Electrical requests outside our scope (new installations, rewiring,
+// junction boxes, full renovation wiring).
+function detectOutOfScopeElectrical(text) {
+  const t = normalizeText(text);
+  const triggers = [
+    "nova instalacij struj",
+    "nova instalacija struj",
+    "nova elektro instalacij",
+    "razvlačenj kablov",
+    "razvlacenj kablov",
+    "razvlači kablov",
+    "razvlaci kablov",
+    "mijenjanj kablov",
+    "izmjena kablov",
+    "izmijenim kablov",
+    "izmijenit kablov",
+    "razvodne kutij",
+    "razvodna kutij",
+    "nova razvodna tabl",
+    "rekonstrukcij struj",
+    "rekonstrukcij instalacij",
+    "renoviram stan",
+    "renoviranj stan",
+    "novi raspored utičnic",
+    "novi raspored uticnic",
+    "nov raspored utičnic",
+    "nov raspored uticnic",
+  ];
+  return triggers.some((p) => t.includes(p));
 }
 
-// Returns the next-step prompt + state after ASK_WALL_TYPE / mounting-mode
-// branch is resolved. Asks the access question if installationType requires
-// it (B2/B3/B4), otherwise skips straight to ASK_WORK_READY.
-function nextAfterWallTypeForInstallations(session) {
+// Detects demolition / removal of old item phrasing.
+function detectDemolition(text) {
+  const t = normalizeText(text);
+  const triggers = [
+    "demontaž",
+    "demontir",
+    "rastavi",
+    "skidanj star",
+    "skinuti star",
+    "skinut star",
+    "uklanjanj star",
+    "ukloniti star",
+    "iznošenj",
+    "iznosenj",
+    "iznijeti",
+    "iznesi",
+    "stari namještaj",
+    "stari namjestaj",
+    "stari ormar",
+    "stara kuhinj",
+    "stari uređaj",
+    "stari uredaj",
+    "stari bojler",
+    "demontira star",
+  ];
+  return triggers.some((p) => t.includes(p));
+}
+
+// True if a work-readiness answer signals the area is not ready (e.g. "ne",
+// "nije pripremljen", "staro nije sklonjeno"). Used to trigger the optional
+// demolition follow-up question.
+function isNegativeWorkReadyAnswer(text) {
+  const t = normalizeText(text);
+  if (t === "ne" || t === "nije") return true;
   if (
-    session.installationType === "B2" ||
-    session.installationType === "B3" ||
-    session.installationType === "B4"
-  ) {
-    session.state = "ASK_ACCESS";
-    return buildAccessQuestionForInstallations(session);
-  }
-  return nextAfterAccessForInstallations(session);
+    t.startsWith("ne ") ||
+    t.startsWith("ne,") ||
+    t.startsWith("ne.") ||
+    t.startsWith("ne-")
+  )
+    return true;
+  if (t.startsWith("nije ") || t.startsWith("nije,") || t.startsWith("nije."))
+    return true;
+  if (t.includes("nije pripremljen")) return true;
+  if (t.includes("nije spreman")) return true;
+  if (t.includes("nije sklonjen")) return true;
+  if (t.includes("nije uklonjen")) return true;
+  if (
+    t.includes("staro je tu") ||
+    t.includes("stari je tu") ||
+    t.includes("stara je tu")
+  )
+    return true;
+  return false;
 }
 
-// Returns the next-step prompt + state once mountingMode is known. Asks for
-// wall type only when the item is fixed to wall or ceiling.
-function nextAfterMountingModeForInstallations(session) {
-  if (session.mountingMode === "wall" || session.mountingMode === "ceiling") {
-    session.state = "ASK_WALL_TYPE";
-    return "Bot: Razumijem. Kakav je zid ili površina? (beton, cigla, knauf/gips, drvo, ytong)";
-  }
-  return nextAfterWallTypeForInstallations(session);
+// For B4 devices where the standalone/built-in distinction is meaningful
+// (stove, cooktop, dishwasher, washing machine, fridge).
+function shouldAskStandaloneOrBuiltIn(itemName) {
+  const item = normalizeText(itemName || "");
+  const relevant = [
+    "šporet",
+    "sporet",
+    "štednjak",
+    "stednjak",
+    "ploča",
+    "ploca",
+    "sudomašin",
+    "sudomasin",
+    "veš mašin",
+    "ves masin",
+    "mašin",
+    "masin",
+    "frižider",
+    "frizider",
+  ];
+  return relevant.some((w) => item.includes(w));
+}
+
+// Standard INSTALLATIONS photo step prompt. Used by all paths converging at
+// ASK_PHOTOS. Quick Reply ("➡️ Dalje") is attached in the Messenger webhook.
+function installationsPhotoPrompt() {
+  return (
+    "Bot: Ako želite, pošaljite fotografiju trenutnog stanja ili mjesta montaže kroz Messenger " +
+    "(maksimalno 2 fotografije). Video trenutno nije podržan. " +
+    "Ako ne želite poslati fotografiju, kliknite Dalje."
+  );
 }
 
 // Builds the access question wording per sub-category and item type.
+// B2/B3 ask only about end-point/visible installations; B4 asks about
+// device-specific connections.
 function buildAccessQuestionForInstallations(session) {
   const itemLower = normalizeText(session.itemName || "");
   if (session.installationType === "B2") {
-    return "Bot: Hvala. Da li je razvodna tabla dostupna i da li postoji pripremljen električni priključak na mjestu montaže?";
+    return "Bot: Hvala. Da li je razvodna tabla sa osiguračima dostupna i da li su električne instalacije na mjestu rada u funkciji?";
   }
   if (session.installationType === "B3") {
-    return "Bot: Hvala. Da li je ventil za zatvaranje vode dostupan i da li postoje potrebni priključci za vodu ili odvod?";
+    return "Bot: Hvala. Da li je ventil za zatvaranje vode dostupan i da li su postojeći priključci za vodu i odvod u funkciji?";
   }
   if (session.installationType === "B4") {
     if (itemLower.includes("bojler")) {
-      return "Bot: Hvala. Da li su dostupni priključci za vodu i struju na mjestu montaže?";
+      return "Bot: Hvala. Da li je ventil za zatvaranje vode dostupan i da li su postojeći priključci za vodu i struju u funkciji?";
+    }
+    if (
+      itemLower.includes("sudomašin") ||
+      itemLower.includes("sudomasin") ||
+      itemLower.includes("veš mašin") ||
+      itemLower.includes("ves masin") ||
+      itemLower.includes("mašin") ||
+      itemLower.includes("masin")
+    ) {
+      return "Bot: Hvala. Da li su postojeći priključci za vodu, odvod i struju u funkciji?";
     }
     if (
       itemLower.includes("šporet") ||
+      itemLower.includes("sporet") ||
       itemLower.includes("štednjak") ||
+      itemLower.includes("stednjak") ||
       itemLower.includes("ploča") ||
       itemLower.includes("ploca")
     ) {
-      return "Bot: Hvala. Da li postoji električni priključak za šporet/ploču na mjestu montaže?";
+      return "Bot: Hvala. Da li postoji električni priključak za šporet/ploču i da li je u funkciji?";
     }
-    if (itemLower.includes("mašin") || itemLower.includes("masin")) {
-      return "Bot: Hvala. Da li su dostupni priključci za vodu, odvod i struju na mjestu montaže?";
+    if (itemLower.includes("napa")) {
+      return "Bot: Hvala. Da li je električni priključak za napu dostupan i u funkciji?";
     }
-    return "Bot: Hvala. Da li su potrebni priključci dostupni na mjestu montaže?";
+    return "Bot: Hvala. Da li su potrebni priključci dostupni i u funkciji na mjestu rada?";
   }
-  return "Bot: Hvala. Da li su potrebni uslovi pripremljeni na mjestu montaže?";
+  return "Bot: Hvala. Da li su potrebni uslovi pripremljeni na mjestu rada?";
+}
+
+// ── INSTALLATIONS flow dispatcher ─────────────────────────────────────────
+// Centralised step router. Given the state just completed, returns the next
+// prompt and updates session.state. Keeps state-machine handlers small.
+function continueInstallationsFlow(session, fromState) {
+  const isWall =
+    session.mountingMode === "wall" || session.mountingMode === "ceiling";
+  const type = session.installationType;
+
+  if (
+    fromState === "ASK_WORK_READY" ||
+    fromState === "ASK_DEMOLITION_FOLLOWUP"
+  ) {
+    if (type === "B4") {
+      if (shouldAskStandaloneOrBuiltIn(session.itemName)) {
+        session.state = "ASK_STANDALONE_OR_BUILTIN";
+        return "Bot: Razumijem. Da li je uređaj samostojeći ili ugradbeni?";
+      }
+      session.state = "ASK_ACCESS";
+      return buildAccessQuestionForInstallations(session);
+    }
+    // B1
+    if (isWall) {
+      session.state = "ASK_WALL_TYPE";
+      return "Bot: Razumijem. Kakav je zid ili površina? (beton, cigla, knauf/gips, drvo, ytong)";
+    }
+    session.state = "ASK_DIMENSIONS";
+    return "Bot: Razumijem. Koje su dimenzije predmeta? (širina x visina x dubina)";
+  }
+
+  if (fromState === "ASK_STANDALONE_OR_BUILTIN") {
+    session.state = "ASK_ACCESS";
+    return buildAccessQuestionForInstallations(session);
+  }
+
+  if (fromState === "ASK_ACCESS") {
+    if (type === "B2" || type === "B3") {
+      session.state = "ASK_PHOTOS";
+      return installationsPhotoPrompt();
+    }
+    // B4
+    if (isWall) {
+      session.state = "ASK_WALL_TYPE";
+      return "Bot: Razumijem. Kakav je zid ili površina? (beton, cigla, knauf/gips, drvo, ytong)";
+    }
+    session.state = "ASK_BRAND";
+    return "Bot: Hvala. Koji je brend (proizvođač) uređaja?";
+  }
+
+  if (fromState === "ASK_WALL_TYPE") {
+    if (type === "B1") {
+      session.state = "ASK_DIMENSIONS";
+      return "Bot: Razumijem. Koje su dimenzije predmeta? (širina x visina x dubina)";
+    }
+    // B4
+    session.state = "ASK_BRAND";
+    return "Bot: Hvala. Koji je brend (proizvođač) uređaja?";
+  }
+
+  if (fromState === "ASK_MODEL") {
+    // INSTALLATIONS B4 only — DEVICES path handled separately.
+    if (isWall) {
+      session.state = "ASK_DIMENSIONS";
+      return "Bot: Razumijem. Koje su dimenzije ili težina predmeta koji se montira?";
+    }
+    session.state = "ASK_PHOTOS";
+    return installationsPhotoPrompt();
+  }
+
+  if (fromState === "ASK_DIMENSIONS") {
+    session.state = "ASK_PHOTOS";
+    return installationsPhotoPrompt();
+  }
+
+  if (fromState === "ASK_HAS_PART") {
+    session.state = "ASK_ACCESS";
+    return buildAccessQuestionForInstallations(session);
+  }
+
+  if (fromState === "ASK_PROBLEM_DESCRIPTION") {
+    session.state = "ASK_HAS_PART";
+    return "Bot: Razumijem. Da li već imate dio koji treba ugraditi/zamijeniti, ili majstor treba da ga donese?";
+  }
+
+  // Fallback — should not happen.
+  session.state = "ASK_PHOTOS";
+  return installationsPhotoPrompt();
+}
+
+// Initial step router after the bot recognises sub-category + item. Returns
+// the intro prompt and sets the first real question state.
+function nextAfterRecognitionInstallations(session) {
+  const type = session.installationType;
+
+  if (type === "B1") {
+    session.state = "ASK_WORK_READY";
+    return (
+      "Bot: Dobro, trebate montažu namještaja. " +
+      "Da bismo Vas što prije spojili sa majstorom, trebam još nekoliko informacija. " +
+      "Da li je prostor pripremljen za rad? (stari predmet uklonjen, površina slobodna, mjesto pristupačno)"
+    );
+  }
+
+  if (type === "B4") {
+    session.state = "ASK_WORK_READY";
+    return (
+      "Bot: Dobro, trebate ugradnju/priključenje uređaja. " +
+      "Da bismo Vas što prije spojili sa majstorom, trebam još nekoliko informacija. " +
+      "Da li je prostor pripremljen za rad? (stari predmet uklonjen, površina slobodna, mjesto pristupačno)"
+    );
+  }
+
+  if (type === "B2") {
+    session.state = "ASK_PROBLEM_DESCRIPTION";
+    return (
+      "Bot: Dobro, trebate manju elektro intervenciju. " +
+      "Da bismo Vas što prije spojili sa majstorom, trebam još nekoliko informacija. " +
+      "Molim Vas da što detaljnije opišete problem koji imate."
+    );
+  }
+
+  if (type === "B3") {
+    session.state = "ASK_PROBLEM_DESCRIPTION";
+    return (
+      "Bot: Dobro, trebate manju vodoinstalatersku intervenciju. " +
+      "Da bismo Vas što prije spojili sa majstorom, trebam još nekoliko informacija. " +
+      "Molim Vas da što detaljnije opišete problem koji imate."
+    );
+  }
+
+  // Type still unknown — ask user.
+  session.state = "ASK_INSTALLATION_TYPE";
+  return (
+    "Bot: Dobro, vidim da Vam treba intervencija. Da bismo Vas što prije spojili sa majstorom, " +
+    "trebam još nekoliko informacija. O kojoj vrsti radova se radi? " +
+    "(npr. montaža namještaja, manja elektro intervencija, manja vodoinstalaterska intervencija, ugradnja/priključenje uređaja)"
+  );
 }
 
 app.use(express.json());
@@ -696,8 +1046,33 @@ function handleAskService(session, tekst) {
     return "Bot: Koji je tačno uređaj u pitanju? (npr. veš mašina, bojler, frižider, laptop)";
   }
 
-  // INSTALLATIONS v2 — detect sub-category and item from the first message
-  // so we can skip redundant questions. No "zabilježeno" wording.
+  // INSTALLATIONS v2 polish — first run out-of-scope detection so we don't
+  // start a flow for jobs we don't accept.
+  if (detectOutOfScopePlumbing(tekst)) {
+    session.state = "END";
+    return (
+      "Bot: Žao nam je, trenutno ne obavljamo odštopavanje i radove na unutrašnjim odvodnim " +
+      "ili vodovodnim instalacijama. Radimo manje vodoinstalaterske intervencije kao što su " +
+      "slavine, sifoni, ventili, fleksibilna crijeva i vodokotlići."
+    );
+  }
+  if (detectOutOfScopeElectrical(tekst)) {
+    session.state = "END";
+    return (
+      "Bot: Žao nam je, trenutno ne radimo nove elektro instalacije, razvlačenje kablova, " +
+      "razvodne kutije niti rekonstrukciju struje u stanu. Radimo manje elektro intervencije " +
+      "kao što su zamjena utičnica, prekidača i rasvjetnih tijela."
+    );
+  }
+
+  // Detect demolition/removal of an old item up-front so we don't ask a
+  // duplicate follow-up later.
+  if (detectDemolition(tekst)) {
+    session.notes.push(`demolition/removal requested (initial): ${tekst}`);
+  }
+
+  // Detect sub-category and item from the first message so we can skip
+  // redundant questions.
   const detectedType = extractInstallationType(tekst);
   if (detectedType) session.installationType = detectedType;
 
@@ -707,41 +1082,35 @@ function handleAskService(session, tekst) {
     session.mountingMode = detectMountingMode(detectedItem);
   }
 
-  // If sub-category is still unknown, ask the user to clarify the type first.
+  // Sub-category unknown → ask the user.
   if (!session.installationType) {
-    session.state = "ASK_INSTALLATION_TYPE";
-    return (
-      "Bot: Dobro, vidim da Vam treba intervencija. Da bismo Vas što prije spojili sa majstorom, " +
-      "trebam još nekoliko informacija. O kojoj vrsti radova se radi? " +
-      "(npr. montaža namještaja, električne instalacije, vodovod, ugradnja uređaja)"
-    );
+    return nextAfterRecognitionInstallations(session);
   }
 
-  // If item is still unknown, ask for it explicitly.
-  if (!session.itemName) {
+  // Sub-category known but item unknown → for B1/B4 we still need the item;
+  // for B2/B3 a description-first approach is OK without a canonical item.
+  if (
+    !session.itemName &&
+    (session.installationType === "B1" || session.installationType === "B4")
+  ) {
     session.state = "ASK_ITEM_NAME";
     return (
       "Bot: Dobro, vidim da Vam treba intervencija. Da bismo Vas što prije spojili sa majstorom, " +
-      "trebam još nekoliko informacija. Šta je tačno potrebno montirati, ugraditi ili zamijeniti?"
+      "trebam još nekoliko informacija. Šta je tačno potrebno montirati, ugraditi ili priključiti?"
     );
   }
 
-  // Both type and item known — jump straight to combined ready+condition step.
-  session.state = "ASK_ITEM_CONDITION_AND_READY";
-  return (
-    `Bot: Dobro, trebate ${describeIntervention(session)}. ` +
-    "Da bismo Vas što prije spojili sa majstorom, trebam još nekoliko informacija. " +
-    "Da li je predmet već kupljen i spreman za montažu, i da li je nov ili polovan?"
-  );
+  return nextAfterRecognitionInstallations(session);
 }
 
 // Short BHS phrase describing the requested intervention. Accusative case so
 // the reply reads naturally after "trebate ...".
 function describeIntervention(session) {
   if (session.installationType === "B1") return "montažu namještaja";
-  if (session.installationType === "B2") return "električne radove";
-  if (session.installationType === "B3") return "vodoinstalaterske radove";
-  if (session.installationType === "B4") return "ugradnju uređaja";
+  if (session.installationType === "B2") return "manju elektro intervenciju";
+  if (session.installationType === "B3")
+    return "manju vodoinstalatersku intervenciju";
+  if (session.installationType === "B4") return "ugradnju/priključenje uređaja";
   return "intervenciju";
 }
 
@@ -757,9 +1126,14 @@ function processMessage(userId, tekst) {
 
   const session = sessions[userId];
 
-  // Block empty input for all states except START
-  // START is triggered without tekst intentionally (first /next call)
-  if (session.state !== "START" && normalizeText(tekst) === "") {
+  // Block empty input for all states except START and END.
+  // START is triggered without tekst intentionally (first /next call); END
+  // is post-completion and has its own polite handler below.
+  if (
+    session.state !== "START" &&
+    session.state !== "END" &&
+    normalizeText(tekst) === ""
+  ) {
     return "Bot: Molim Vas unesite odgovor kako bismo nastavili.";
   }
 
@@ -800,9 +1174,7 @@ function processMessage(userId, tekst) {
     session.model = isUnknown ? "nepoznat" : tekst;
 
     if (session.branch === "INSTALLATIONS") {
-      // Continue INSTALLATIONS flow after brand/model: dimensions (B1 or
-      // wall/ceiling) or straight to floor.
-      return nextAfterInstallationsCore(session);
+      return continueInstallationsFlow(session, "ASK_MODEL");
     }
 
     session.state = "ASK_DESCRIPTION";
@@ -830,11 +1202,11 @@ function processMessage(userId, tekst) {
     session.state = "ASK_PHOTOS";
     return "Bot: Hvala. Ako želite, možete nam poslati fotografiju uređaja, mjesta kvara ili naljepnice sa modelom (maksimalno 2 fotografije). Ako nemate fotografiju, napišite Dalje.";
 
-    // ── INSTALLATIONS v2 state machine ───────────────────────────────────────
+    // ── INSTALLATIONS v2 polish state machine ────────────────────────────────
   } else if (session.state === "ASK_INSTALLATION_TYPE") {
     // Re-classify from the user's clarification.
     const detectedType = extractInstallationType(tekst);
-    session.installationType = detectedType || tekst;
+    if (detectedType) session.installationType = detectedType;
 
     // Try to also extract an item from the same message.
     const detectedItem = extractInstallationItem(tekst);
@@ -843,94 +1215,114 @@ function processMessage(userId, tekst) {
       session.mountingMode = detectMountingMode(detectedItem);
     }
 
-    if (!session.itemName) {
-      session.state = "ASK_ITEM_NAME";
-      return "Bot: Razumijem. Šta je tačno potrebno montirati, ugraditi ili zamijeniti?";
+    if (detectDemolition(tekst)) {
+      session.notes.push(
+        `demolition/removal mentioned (type-clarification): ${tekst}`,
+      );
     }
 
-    session.state = "ASK_ITEM_CONDITION_AND_READY";
-    return "Bot: Razumijem. Da li je predmet već kupljen i spreman za montažu, i da li je nov ili polovan?";
+    if (!session.installationType) {
+      // Still couldn't classify — keep asking, no infinite loop because the
+      // next message has another chance.
+      session.installationType = tekst; // raw fallback so summary isn't empty
+    }
+
+    if (
+      !session.itemName &&
+      (session.installationType === "B1" || session.installationType === "B4")
+    ) {
+      session.state = "ASK_ITEM_NAME";
+      return "Bot: Razumijem. Šta je tačno potrebno montirati, ugraditi ili priključiti?";
+    }
+
+    return nextAfterRecognitionInstallations(session);
   } else if (session.state === "ASK_ITEM_NAME") {
     // Store the item name and infer mountingMode.
     const detectedItem = extractInstallationItem(tekst);
     session.itemName = detectedItem || tekst;
     session.mountingMode = detectMountingMode(session.itemName);
 
-    // If installationType is still missing or non-canonical, try once more from this message.
+    // Try to also lock in installationType from this message if still missing.
     if (!["B1", "B2", "B3", "B4"].includes(session.installationType || "")) {
       const detectedType = extractInstallationType(tekst);
       if (detectedType) session.installationType = detectedType;
     }
 
-    session.state = "ASK_ITEM_CONDITION_AND_READY";
-    return "Bot: Razumijem. Da li je predmet već kupljen i spreman za montažu, i da li je nov ili polovan?";
-  } else if (session.state === "ASK_ITEM_CONDITION_AND_READY") {
-    const parsed = parseItemReadyAndCondition(tekst);
-    session.itemCondition = parsed.itemCondition;
-    session.itemReady = parsed.itemReady;
-    // Keep raw answer in notes so nothing is lost when parsing is partial.
-    session.notes.push(`condition+ready: ${tekst}`);
+    if (detectDemolition(tekst)) {
+      session.notes.push(
+        `demolition/removal mentioned (item-clarification): ${tekst}`,
+      );
+    }
 
-    if (session.mountingMode === "unknown" || !session.mountingMode) {
-      session.state = "ASK_MOUNTING_MODE";
-      return "Bot: Razumijem. Da li se predmet montira samostojeće, ili se fiksira na zid ili plafon?";
-    }
-    return nextAfterMountingModeForInstallations(session);
-  } else if (session.state === "ASK_MOUNTING_MODE") {
+    return nextAfterRecognitionInstallations(session);
+  } else if (session.state === "ASK_PROBLEM_DESCRIPTION") {
+    // B2/B3 problem-first flow: store description, then ask whether client
+    // already has the replacement part.
+    session.description = tekst;
+    return continueInstallationsFlow(session, "ASK_PROBLEM_DESCRIPTION");
+  } else if (session.state === "ASK_HAS_PART") {
+    // Record raw answer in notes. Best-effort parse into itemReady.
+    session.notes.push(`has-part: ${tekst}`);
     const lower = normalizeText(tekst);
-    if (lower.includes("plafon") || lower.includes("strop")) {
-      session.mountingMode = "ceiling";
-    } else if (lower.includes("zid") || lower.includes("fiks")) {
-      session.mountingMode = "wall";
-    } else if (
-      lower.includes("samostoj") ||
-      lower.includes("slobod") ||
-      lower.includes("ne fiks") ||
-      lower.includes("nije fiks")
-    ) {
-      session.mountingMode = "freestanding";
-    } else {
-      // Couldn't parse — store the raw answer and treat as freestanding to keep flow moving.
-      session.notes.push(`mountingMode raw: ${tekst}`);
-      session.mountingMode = "freestanding";
+    const userHas = [
+      "imam",
+      "imamo",
+      "kod mene",
+      "kupljen",
+      "nabavljen",
+      "već imam",
+      "vec imam",
+    ];
+    const majstorBrings = [
+      "donese",
+      "donesite",
+      "donesi",
+      "ne",
+      "nemam",
+      "neka donese",
+      "neka majstor",
+    ];
+    if (userHas.some((w) => lower.includes(w))) {
+      session.itemReady = true;
+    } else if (majstorBrings.some((w) => lower.includes(w))) {
+      session.itemReady = false;
     }
-    return nextAfterMountingModeForInstallations(session);
+    return continueInstallationsFlow(session, "ASK_HAS_PART");
   } else if (session.state === "ASK_WALL_TYPE") {
     session.wallType = tekst;
-    return nextAfterWallTypeForInstallations(session);
+    return continueInstallationsFlow(session, "ASK_WALL_TYPE");
   } else if (session.state === "ASK_ACCESS") {
     session.accessInfo = tekst;
-    return nextAfterAccessForInstallations(session);
+    return continueInstallationsFlow(session, "ASK_ACCESS");
+  } else if (session.state === "ASK_STANDALONE_OR_BUILTIN") {
+    session.notes.push(`standalone/built-in: ${tekst}`);
+    return continueInstallationsFlow(session, "ASK_STANDALONE_OR_BUILTIN");
   } else if (session.state === "ASK_WORK_READY") {
     session.workReady = tekst;
 
-    // INSTALLATIONS v2: only B4 with itemReady=true triggers brand/model.
-    if (
-      session.branch === "INSTALLATIONS" &&
-      session.installationType === "B4" &&
-      session.itemReady === true
-    ) {
-      session.state = "ASK_BRAND";
-      return "Bot: Hvala. Koji je brend (proizvođač) uređaja?";
+    // Note any demolition mention in the answer itself.
+    if (detectDemolition(tekst)) {
+      session.notes.push(`demolition/removal mentioned (work_ready): ${tekst}`);
     }
 
-    // Otherwise: dimensions step (if applicable) or straight to floor.
-    return nextAfterInstallationsCore(session);
+    const alreadyNotedDemolition = session.notes.some((n) =>
+      n.startsWith("demolition/removal"),
+    );
+    if (isNegativeWorkReadyAnswer(tekst) && !alreadyNotedDemolition) {
+      session.state = "ASK_DEMOLITION_FOLLOWUP";
+      return "Bot: Da li Vam je potrebno uklanjanje/demontaža starog predmeta prije montaže/priključenja novog?";
+    }
+
+    return continueInstallationsFlow(session, "ASK_WORK_READY");
+  } else if (session.state === "ASK_DEMOLITION_FOLLOWUP") {
+    session.notes.push(`demolition follow-up answer: ${tekst}`);
+    return continueInstallationsFlow(session, "ASK_DEMOLITION_FOLLOWUP");
   } else if (session.state === "ASK_DIMENSIONS") {
     session.dimensions = tekst;
-    session.state = "ASK_FLOOR";
-    return "Bot: Hvala. Na kojem spratu se obavljaju radovi i da li postoji lift?";
-  } else if (session.state === "ASK_FLOOR") {
-    session.floorInfo = tekst;
-    session.state = "ASK_PARKING";
-    return "Bot: Razumijem. Da li je parking dostupan u blizini objekta?";
-  } else if (session.state === "ASK_PARKING") {
-    session.parkingInfo = tekst;
-    session.state = "ASK_PHOTOS";
-    return "Bot: Hvala. Ako želite, pošaljite fotografiju trenutnog stanja ili mjesta montaže (maksimalno 2 fotografije). Ako nemate fotografiju, napišite Dalje.";
+    return continueInstallationsFlow(session, "ASK_DIMENSIONS");
   } else if (session.state === "ASK_PHOTOS") {
     if (normalizeText(tekst) === "dalje") {
-      // Both branches converge on ASK_CONFIRMATION in v2.
+      // Both branches converge on ASK_CONFIRMATION.
       session.state = "ASK_CONFIRMATION";
       if (session.branch === "INSTALLATIONS") {
         return "Bot: Hvala na informacijama. Da li želite da Vas naš majstor kontaktira radi dogovora oko dolaska na teren i izvođenja radova? (da/ne)";
@@ -945,7 +1337,7 @@ function processMessage(userId, tekst) {
     // Text in ASK_PHOTOS is NOT a photo — photos only arrive as attachments via POST /webhook.
     // Any other text: remind the user to send a photo or write Dalje.
     if (session.branch === "INSTALLATIONS") {
-      return "Bot: Ako želite, pošaljite fotografiju trenutnog stanja ili mjesta montaže. Ako nemate fotografiju, napišite Dalje.";
+      return installationsPhotoPrompt();
     }
     return "Bot: Ako želite, pošaljite fotografiju. Ako nemate fotografiju, napišite Dalje.";
 
@@ -1025,39 +1417,42 @@ function processMessage(userId, tekst) {
     if (session.branch === "INSTALLATIONS") {
       const typeLabels = {
         B1: "B1 — montaža namještaja",
-        B2: "B2 — električne instalacije",
-        B3: "B3 — vodoinstalaterski radovi",
-        B4: "B4 — ugradnja uređaja",
+        B2: "B2 — manja elektro intervencija",
+        B3: "B3 — manja vodoinstalaterska intervencija",
+        B4: "B4 — ugradnja/priključenje uređaja",
       };
       const typeLine =
         typeLabels[session.installationType] || session.installationType || "—";
-      const condLine = `${session.itemCondition || "—"} / ${
-        session.itemReady === true
-          ? "već kupljeno"
-          : session.itemReady === false
-            ? "nije još kupljeno"
-            : "—"
-      }`;
+
+      // Build summary by appending only populated fields — keeps the message
+      // short for small jobs and grows naturally when more was collected.
+      const lines = ["--- REZIME ---", `Vrsta radova: ${typeLine}`];
+      if (session.itemName)
+        lines.push(`Predmet/intervencija: ${session.itemName}`);
+      if (session.description)
+        lines.push(`Opis problema: ${session.description}`);
+      if (session.wallType) lines.push(`Zid/površina: ${session.wallType}`);
+      if (session.accessInfo)
+        lines.push(`Pristup instalacijama: ${session.accessInfo}`);
+      if (session.brand) lines.push(`Brend: ${session.brand}`);
+      if (session.model) lines.push(`Model: ${session.model}`);
+      if (session.workReady)
+        lines.push(`Prostor pripremljen: ${session.workReady}`);
+      if (session.dimensions) lines.push(`Dimenzije: ${session.dimensions}`);
+      if (session.floorInfo) lines.push(`Sprat/lift: ${session.floorInfo}`);
+      if (session.parkingInfo) lines.push(`Parking: ${session.parkingInfo}`);
+      if (session.notes && session.notes.length > 0) {
+        lines.push(`Napomene: ${session.notes.join(" | ")}`);
+      }
+      lines.push(`Broj fotografija: ${photoCount}`);
+      lines.push(`Telefon: ${session.phone}`);
+      if (session.location) lines.push(`Lokacija/adresa: ${session.location}`);
+      if (session.name) lines.push(`Ime: ${session.name}`);
+      lines.push("----------------");
+
       return `Bot: Hvala Vam! Vaš zahtjev je primljen.
 
---- REZIME ---
-Vrsta radova: ${typeLine}
-Predmet radova: ${session.itemName || "—"}
-Novo/polovno / kupljeno: ${condLine}
-Način montaže: ${session.mountingMode || "—"}
-Zid/površina: ${session.wallType || "—"}
-Pristup instalacijama: ${session.accessInfo || "—"}
-Brend: ${session.brand || "—"}
-Model: ${session.model || "—"}
-Prostor pripremljen: ${session.workReady || "—"}
-Dimenzije: ${session.dimensions || "—"}
-Sprat/lift: ${session.floorInfo || "—"}
-Parking: ${session.parkingInfo || "—"}
-Broj fotografija: ${photoCount}
-Telefon: ${session.phone}
-Lokacija/adresa: ${session.location || "—"}
-Ime: ${session.name || "—"}
-----------------
+${lines.join("\n")}
 
 Naš majstor će Vas kontaktirati u najkraćem roku!`;
     }
@@ -1079,10 +1474,18 @@ Ime: ${session.name || "—"}
 ----------------
 
 Naš serviser će Vas kontaktirati u najkraćem roku!`;
+  } else if (session.state === "END") {
+    // Post-completion handler — never leak internal state names to the user.
+    const lower = normalizeText(tekst);
+    if (lower.includes("hvala")) {
+      return "Bot: Hvala Vama.";
+    }
+    return "Bot: Hvala Vam. Ako budete imali novi zahtjev, slobodno nam ponovo pišite.";
   }
 
-  // Fallback — should not normally be reached
-  return `Bot: Trenutno stanje je ${session.state}`;
+  // Fallback — should not normally be reached. Always reply politely; never
+  // expose the internal state name.
+  return "Bot: Hvala Vam. Ako budete imali novi zahtjev, slobodno nam ponovo pišite.";
 }
 
 // ── Sends a text reply to a Messenger user via the Facebook Send API ───────
@@ -1118,6 +1521,57 @@ function sendMessengerReply(recipientId, messageText) {
 
   req.on("error", (err) => {
     console.error("Failed to send Messenger reply:", err.message);
+  });
+
+  req.write(body);
+  req.end();
+}
+
+// ── Sends a Messenger reply with Quick Reply buttons ──────────────────────
+// Used only by the INSTALLATIONS ASK_PHOTOS step. quickReplies is an array of
+// { title, payload } objects; Messenger sends back the payload as the user's
+// next message when the button is clicked.
+function sendMessengerQuickReply(recipientId, messageText, quickReplies) {
+  const body = JSON.stringify({
+    recipient: { id: recipientId },
+    message: {
+      text: messageText,
+      quick_replies: quickReplies.map((qr) => ({
+        content_type: "text",
+        title: qr.title,
+        payload: qr.payload,
+      })),
+    },
+  });
+
+  const options = {
+    hostname: "graph.facebook.com",
+    path: `/v18.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(body),
+    },
+  };
+
+  const req = https.request(options, (fbRes) => {
+    let data = "";
+    fbRes.on("data", (chunk) => {
+      data += chunk;
+    });
+    fbRes.on("end", () => {
+      if (fbRes.statusCode !== 200) {
+        console.error(
+          "Facebook Send API error (quick reply):",
+          fbRes.statusCode,
+          data,
+        );
+      }
+    });
+  });
+
+  req.on("error", (err) => {
+    console.error("Failed to send Messenger quick reply:", err.message);
   });
 
   req.write(body);
@@ -1283,19 +1737,38 @@ app.post("/webhook", (req, res) => {
       }
 
       // ── Text message handling ──────────────────────────────────────────
-      // No attachments — process as a regular text message.
-      if (!text) return; // delivery receipts, read receipts, reactions, etc.
+      // No attachments — process as a regular text message. Quick Reply
+      // button clicks arrive with event.message.quick_reply.payload set; we
+      // treat the payload as plain text so the state machine sees it the
+      // same as if the user typed it.
+      const quickReplyPayload = event.message?.quick_reply?.payload;
+      const inputText = quickReplyPayload || text;
+      if (!inputText) return; // delivery receipts, read receipts, reactions, etc.
 
-      console.log(`Messenger message from ${senderId}: ${text}`);
+      console.log(`Messenger message from ${senderId}: ${inputText}`);
 
       // Run through the same state machine used by GET /next
-      const reply = processMessage(senderId, text);
+      const reply = processMessage(senderId, inputText);
 
       // Strip the "Bot: " prefix — it is only for the browser testing endpoint
       const messengerText = reply.trim().replace(/^Bot:\s*/, "");
 
-      console.log(`[webhook] → sendMessengerReply: text reply to ${senderId}`);
-      sendMessengerReply(senderId, messengerText);
+      // Send with Quick Reply on the photo step so the user has a clear
+      // "Dalje" button without having to type the word.
+      const sessionAfter = sessions[senderId];
+      if (sessionAfter && sessionAfter.state === "ASK_PHOTOS") {
+        console.log(
+          `[webhook] → sendMessengerQuickReply: ASK_PHOTOS to ${senderId}`,
+        );
+        sendMessengerQuickReply(senderId, messengerText, [
+          { title: "➡️ Dalje", payload: "Dalje" },
+        ]);
+      } else {
+        console.log(
+          `[webhook] → sendMessengerReply: text reply to ${senderId}`,
+        );
+        sendMessengerReply(senderId, messengerText);
+      }
     });
   });
 

@@ -58,25 +58,44 @@ function classifyBranch(text) {
   // INSTALLATIONS, not DEVICES. Stems are used to catch declined forms
   // (e.g. "slavinu" from "slavina") that the original keyword list misses.
   const installationIntent = [
+    // Assembly / installation verbs
     "montaž",
-    "montira",
+    "montaz",
+    "montir",
+    "namontir",
+    "smontir",
     "ugradnj",
     "ugradi",
+    "ugrađ",
+    "ugradj",
     "instalacij",
-    "postavljanj",
-    "zamijen",
-    "zamjen",
+    "postav",
+    "postavlj",
     "priključ",
     "prikljuc",
+    "spojiti",
+    "spajanj",
+    "povezati",
+    "povezat",
+    "sastav",
+    "sastavlj",
+    "sklop",
+    "sklap",
+    "pričvrst",
+    "pricvrst",
+    "učvrst",
+    "ucvrst",
+    "zamijen",
+    "zamjen",
+    "zamijena",
+    "zamjena",
+    // Endpoint plumbing items (B3)
     "slavin",
     "česm",
     "cesm",
-    "utičnic",
-    "uticnic",
-    "prekidač",
-    "prekidac",
-    "luster",
-    "plafonjer",
+    "pipa",
+    "ventil",
+    "sifon",
     "vodokotlić",
     "vodokotlic",
     "wc kotlić",
@@ -85,11 +104,56 @@ function classifyBranch(text) {
     "fleksibiln",
     "lavabo",
     "umivaonik",
+    "sudoper",
+    "tuš kabin",
+    "tus kabin",
+    "tuš baterij",
+    "tus baterij",
+    "wc šolj",
+    "wc solj",
+    "wc školjk",
+    "wc skoljk",
+    "vc šolj",
+    "vc solj",
+    "bide",
+    // Endpoint electrical items (B2)
+    "utičnic",
+    "uticnic",
+    "prekidač",
+    "prekidac",
+    "luster",
+    "plafonjer",
     "rasvjetn",
     "grlo sijal",
+    "svjetlo",
+    "svijetlo",
+    "svetlo",
+    "ne radi svjetlo",
+    "ne radi svijetlo",
+    "ne radi svetlo",
+    "osigurač",
+    "osigurac",
+    // Furniture / assembly items (B1)
+    "karniš",
+    "karnis",
+    "garniš",
+    "garnis",
+    "regal",
   ];
   for (const kw of installationIntent) {
     if (input.includes(kw)) return "INSTALLATIONS";
+  }
+
+  // [polish-fix] Combined-stem checks for declined phrases like
+  // "kuhinjskih elemenata" / "viseće elemente" that don't survive as a
+  // single substring.
+  if (
+    (input.includes("kuhinjsk") ||
+      input.includes("viseć") ||
+      input.includes("visec")) &&
+    input.includes("elemen")
+  ) {
+    return "INSTALLATIONS";
   }
 
   const deviceKeywords = [
@@ -316,18 +380,31 @@ function extractInstallationType(text) {
     "slavin",
     "česm",
     "cesm",
+    "pipa",
     "ventil",
     "sifon",
     "vodokotlić",
     "vodokotlic",
     "wc kotlić",
     "wc kotlic",
+    "wc šolj",
+    "wc solj",
+    "wc školjk",
+    "wc skoljk",
+    "vc šolj",
+    "vc solj",
+    "vc školjk",
+    "vc skoljk",
+    "bide",
     "tuš baterij",
     "tus baterij",
+    "tuš kabin",
+    "tus kabin",
     "fleksibiln",
     "fleks crijev",
     "lavabo",
     "umivaonik",
+    "sudoper",
   ];
   if (b3PriorityKeywords.some((w) => input.includes(w))) return "B3";
 
@@ -335,8 +412,11 @@ function extractInstallationType(text) {
   const installIntent = [
     "ugradnj",
     "ugradi",
+    "ugrađ",
+    "ugradj",
     "montaž",
     "montira",
+    "namontir",
     "instalacij",
     "kupio",
     "kupili",
@@ -345,29 +425,58 @@ function extractInstallationType(text) {
     "planiram",
     "priključ",
     "prikljuc",
-    "spoji",
-    "povez",
+    "spojiti",
+    "spajanj",
+    "povezati",
+    "povezat",
+    "sklop",
+    "sklap",
+    "sastav",
     "zamijen",
     "zamjen",
   ];
   const devices = [
     "bojler",
+    "kuhinjski bojler",
+    "mali bojler",
+    "protočni bojler",
+    "protocni bojler",
     "šporet",
     "sporet",
     "stednjak",
     "štednjak",
     "električni šporet",
     "elektricni sporet",
+    "električni štednjak",
+    "elektricni stednjak",
     "ploča",
     "ploca",
+    "indukciona ploč",
+    "indukciona ploc",
     "ugradbena ploč",
     "ugradbena ploc",
+    "električna ploč",
+    "elektricna ploc",
     "sudomašin",
     "sudomasin",
+    "perilica za suđe",
+    "perilica za sudje",
     "mašina za suđe",
     "masina za sudje",
+    "sudna mašin",
+    "sudna masin",
+    "mašina za pranje suđa",
+    "masina za pranje sudja",
+    "mašina za pranje posuđa",
+    "masina za pranje posudja",
     "veš mašin",
     "ves masin",
+    "vešna mašin",
+    "vesna masin",
+    "mašina za veš",
+    "masina za ves",
+    "mašina za pranje veša",
+    "masina za pranje vesa",
     "mašin",
     "masin",
     "klima",
@@ -385,26 +494,46 @@ function extractInstallationType(text) {
     "slavin",
     "česm",
     "cesm",
+    "pipa",
     "ventil",
     "sifon",
     "toalet",
     "tuš baterij",
     "tus baterij",
+    "tuš kabin",
+    "tus kabin",
+    "kada",
     "vodokotlić",
     "vodokotlic",
     "wc kotlić",
     "wc kotlic",
+    "wc šolj",
+    "wc solj",
+    "wc školjk",
+    "wc skoljk",
+    "vc šolj",
+    "vc solj",
+    "vc školjk",
+    "vc skoljk",
+    "bide",
     "kotlić",
     "kotlic",
     "fleksibiln",
     "fleks crijev",
     "fleks crijevo",
     "crijev",
+    "crjev",
     "lavabo",
     "umivaonik",
+    "sudoper",
     "vodovod",
     "cijev",
     "odvod",
+    "curi ispod",
+    "curenj",
+    "pušta vodu",
+    "pusta vodu",
+    "kapanj",
   ];
   if (b3Keywords.some((w) => input.includes(w))) return "B3";
 
@@ -424,6 +553,28 @@ function extractInstallationType(text) {
     "grlo sijal",
     "grlo",
     "sijalic",
+    "žarulj",
+    "zarulj",
+    "svjetlo",
+    "svijetlo",
+    "svetlo",
+    "svjetl",
+    "svijetl",
+    "svetl",
+    "ne sija",
+    "ne svijetli",
+    "ne svjetli",
+    "napon",
+    "naponsk",
+    "osigurač",
+    "osigurac",
+    "izbacuje osigura",
+    "ispada osigura",
+    "iskače osigura",
+    "iskace osigura",
+    "pada osigura",
+    "kratki spoj",
+    "kratak spoj",
     "tv nosač",
     "tv nosac",
     "električn",
@@ -437,6 +588,7 @@ function extractInstallationType(text) {
     "namještaj",
     "namjesta",
     "ormar",
+    "regal",
     "polic",
     "krevet",
     "komod",
@@ -446,8 +598,25 @@ function extractInstallationType(text) {
     "stolic",
     "radni sto",
     "ogledal",
+    "karniš",
+    "karnis",
+    "garniš",
+    "garnis",
+    "stalaž",
+    "stalaz",
   ];
   if (b1Keywords.some((w) => input.includes(w))) return "B1";
+
+  // Combined-stem check for "kuhinjsk* element*" / "viseć* element*" in any
+  // BHS declension.
+  if (
+    (input.includes("kuhinjsk") ||
+      input.includes("viseć") ||
+      input.includes("visec")) &&
+    input.includes("elemen")
+  ) {
+    return "B1";
+  }
 
   return null;
 }
@@ -461,6 +630,7 @@ function extractInstallationItem(text) {
   const items = [
     { keywords: ["tv nosač", "tv nosac"], item: "TV nosač" },
     { keywords: ["tuš baterij", "tus baterij"], item: "tuš baterija" },
+    { keywords: ["tuš kabin", "tus kabin"], item: "tuš kabina" },
     { keywords: ["radni sto"], item: "radni sto" },
     {
       keywords: ["fleksibilna crijev", "fleksibilno crijev", "fleks crijev"],
@@ -477,18 +647,80 @@ function extractInstallationItem(text) {
       ],
       item: "vodokotlić",
     },
+    {
+      keywords: [
+        "wc šolj",
+        "wc solj",
+        "wc školjk",
+        "wc skoljk",
+        "vc šolj",
+        "vc solj",
+        "vc školjk",
+        "vc skoljk",
+      ],
+      item: "WC šolja",
+    },
+    { keywords: ["bide"], item: "bide" },
+    {
+      keywords: ["indukciona ploč", "indukciona ploc"],
+      item: "indukciona ploča",
+    },
     { keywords: ["ugradbena ploč", "ugradbena ploc"], item: "ugradbena ploča" },
+    {
+      keywords: ["električna ploč", "elektricna ploc"],
+      item: "električna ploča",
+    },
     {
       keywords: ["električni šporet", "elektricni sporet"],
       item: "električni šporet",
     },
-    { keywords: ["grlo sijal"], item: "grlo sijalice" },
-    { keywords: ["rasvjetno tijel", "rasvjetn"], item: "rasvjetno tijelo" },
     {
-      keywords: ["sudomašin", "sudomasin", "mašina za suđe", "masina za sudje"],
+      keywords: ["električni štednjak", "elektricni stednjak"],
+      item: "električni štednjak",
+    },
+    { keywords: ["kuhinjski bojler"], item: "kuhinjski bojler" },
+    {
+      keywords: ["protočni bojler", "protocni bojler"],
+      item: "protočni bojler",
+    },
+    { keywords: ["mali bojler"], item: "mali bojler" },
+    {
+      keywords: ["kuhinjski element", "kuhinjske element", "kuhinjsk element"],
+      item: "kuhinjski element",
+    },
+    {
+      keywords: ["viseći element", "viseci element", "viseće element"],
+      item: "viseći element",
+    },
+    { keywords: ["karniš", "karnis", "garniš", "garnis"], item: "karniša" },
+    { keywords: ["grlo sijal"], item: "grlo sijalice" },
+    { keywords: ["rasvjetno tijel"], item: "rasvjetno tijelo" },
+    {
+      keywords: [
+        "sudomašin",
+        "sudomasin",
+        "mašina za suđe",
+        "masina za sudje",
+        "sudna mašin",
+        "sudna masin",
+        "perilica za suđe",
+        "perilica za sudje",
+      ],
       item: "sudomašina",
     },
-    { keywords: ["veš mašin", "ves masin"], item: "veš mašina" },
+    {
+      keywords: [
+        "veš mašin",
+        "ves masin",
+        "vešna mašin",
+        "vesna masin",
+        "mašina za veš",
+        "masina za ves",
+        "mašina za pranje veša",
+        "masina za pranje vesa",
+      ],
+      item: "veš mašina",
+    },
     { keywords: ["ogledalo"], item: "ogledalo" },
     { keywords: ["luster"], item: "luster" },
     { keywords: ["plafonjer"], item: "plafonjera" },
@@ -496,18 +728,24 @@ function extractInstallationItem(text) {
     { keywords: ["lampa"], item: "lampa" },
     { keywords: ["svjetiljk"], item: "svjetiljka" },
     { keywords: ["sijalic"], item: "sijalica" },
+    { keywords: ["žarulj", "zarulj"], item: "sijalica" },
+    { keywords: ["svjetlo", "svijetlo", "svetlo"], item: "svjetlo" },
+    { keywords: ["rasvjetn"], item: "rasvjetno tijelo" },
+    { keywords: ["osigurač", "osigurac"], item: "osigurač" },
     { keywords: ["utičnic", "uticnic"], item: "utičnica" },
     { keywords: ["prekidač", "prekidac"], item: "prekidač" },
     { keywords: ["slavin"], item: "slavina" },
-    { keywords: ["česm", "cesm"], item: "česma" },
+    { keywords: ["česm", "cesm", "pipa"], item: "česma" },
     { keywords: ["ventil"], item: "ventil" },
     { keywords: ["sifon"], item: "sifon" },
-    { keywords: ["crijev"], item: "crijevo" },
+    { keywords: ["crijev", "crjev"], item: "crijevo" },
     { keywords: ["lavabo"], item: "lavabo" },
     { keywords: ["umivaonik"], item: "umivaonik" },
+    { keywords: ["sudoper"], item: "sudoper" },
+    { keywords: ["kada"], item: "kada" },
     { keywords: ["napa"], item: "napa" },
     { keywords: ["bojler"], item: "bojler" },
-    { keywords: ["štednjak"], item: "štednjak" },
+    { keywords: ["štednjak", "stednjak"], item: "štednjak" },
     { keywords: ["šporet", "sporet"], item: "šporet" },
     { keywords: ["ploča", "ploca"], item: "ploča" },
     { keywords: ["mašin", "masin"], item: "mašina" },
@@ -515,11 +753,13 @@ function extractInstallationItem(text) {
     { keywords: ["zamrziv"], item: "zamrzivač" },
     { keywords: ["frižider", "frizider"], item: "frižider" },
     { keywords: ["ormar"], item: "ormar" },
+    { keywords: ["regal"], item: "regal" },
     { keywords: ["komod"], item: "komoda" },
     { keywords: ["krevet"], item: "krevet" },
     { keywords: ["polic"], item: "polica" },
     { keywords: ["vitrin"], item: "vitrina" },
     { keywords: ["ladič", "ladic"], item: "ladičar" },
+    { keywords: ["stalaž", "stalaz"], item: "stalaža" },
     { keywords: ["stolic"], item: "stolica" },
   ];
 
@@ -528,6 +768,17 @@ function extractInstallationItem(text) {
       if (input.includes(kw)) return entry.item;
     }
   }
+
+  // [polish-fix] Combined-stem fallback for "kuhinjsk* elemen*" /
+  // "viseć* elemen*" so we recognize declined plurals like
+  // "kuhinjskih elemenata" (BHS genitive plural "elemen-AT-a" drops the t
+  // before declension endings).
+  if (input.includes("elemen")) {
+    if (input.includes("viseć") || input.includes("visec"))
+      return "viseći element";
+    if (input.includes("kuhinjsk")) return "kuhinjski element";
+  }
+
   return null;
 }
 
@@ -553,14 +804,23 @@ function detectMountingMode(itemName) {
     "tuš baterij",
     "tus baterij",
     "viseć",
+    "visec",
     "lampa",
     "svjetiljk",
     "reflektor",
+    "karniš",
+    "karnis",
+    "garniš",
+    "garnis",
+    "kuhinjski element", // typically wall-mounted upper kitchen elements
   ];
   if (wallItems.some((w) => input.includes(w))) return "wall";
 
   const freestandingItems = [
     "ormar",
+    "regal",
+    "stalaž",
+    "stalaz",
     "komod",
     "krevet",
     "vitrin",
@@ -645,64 +905,143 @@ function parseItemReadyAndCondition(text) {
 
 // ── [4c-UX-polish] Out-of-scope detectors for B2/B3 major jobs ───────────
 
-// Plumbing requests outside our scope (clogged pipes, drain unclogging,
-// in-wall pipework, sewer, new water installation). Returns true if any
-// trigger appears in the user text.
+// Plumbing requests outside our scope (sewer, in-wall pipework, full
+// reconstructions, main drains, vertical risers). Returns true ONLY for
+// strong major-work signals. Endpoint clogs near siphon/sink/lavabo/umivaonik
+// remain B3 because the work is local and visible.
 function detectOutOfScopePlumbing(text) {
   const t = normalizeText(text);
-  const triggers = [
-    "začepljen",
-    "zacepljen",
-    "odštopavanj",
-    "odstopavanj",
-    "odštopa",
-    "odstopa",
+
+  // Local endpoint context — if any of these appears, the request stays B3
+  // even when a general "začepljen odvod" phrase is present. The work is on
+  // a visible siphon/sink/lavabo/etc., not on a buried drain pipe.
+  const localEndpointContext = [
+    "sifon",
+    "sudoper",
+    "lavabo",
+    "umivaonik",
+    "ispod lavabo",
+    "ispod sudoper",
+    "ispod umivaonik",
+    "u lavabou",
+    "u sudoperu",
+    "u umivaoniku",
+  ];
+  const hasLocalContext = localEndpointContext.some((p) => t.includes(p));
+
+  // Strong major-work triggers — always out-of-scope.
+  const strongTriggers = [
     "kanalizacij",
+    "začepljena cijev",
+    "zacepljena cijev",
+    "začepljena odvodna cijev",
+    "zacepljena odvodna cijev",
+    "odvodna cijev",
+    "cijev u zidu",
     "pukla cijev",
     "pucanj cijev",
     "pucanje cijev",
     "mijenjanj cijev",
     "izmjena cijev",
-    "zamjena cijev u zidu",
-    "cijev u zidu",
+    "zamjena cijev",
     "nova vodovodna instalacij",
     "nova vodovodna",
+    "vodovodna instalacij u stan",
+    "glavni odvod",
+    "vertikala",
+    "odštopavanj kanalizacij",
+    "odstopavanj kanalizacij",
   ];
-  return triggers.some((p) => t.includes(p));
+  if (strongTriggers.some((p) => t.includes(p))) return true;
+
+  // Generic "začepljen odvod" / "ne otiče voda" — out-of-scope only when no
+  // local endpoint context appears alongside it.
+  const genericClogTriggers = [
+    "začepljen odvod",
+    "zacepljen odvod",
+    "začepljeni odvod",
+    "zacepljeni odvod",
+    "ne otiče voda",
+    "ne otice voda",
+  ];
+  if (genericClogTriggers.some((p) => t.includes(p)) && !hasLocalContext) {
+    return true;
+  }
+
+  return false;
 }
 
 // Electrical requests outside our scope (new installations, rewiring,
-// junction boxes, full renovation wiring).
+// junction boxes, full renovation wiring). Returns true ONLY for strong
+// major-work signals. Local endpoint problems (osigurač izbacuje, ne radi
+// svjetlo, kratki spoj na lusteru) remain B2.
 function detectOutOfScopeElectrical(text) {
   const t = normalizeText(text);
-  const triggers = [
-    "nova instalacij struj",
-    "nova instalacija struj",
+  const strongTriggers = [
+    "nova instalacij",
     "nova elektro instalacij",
-    "razvlačenj kablov",
-    "razvlacenj kablov",
-    "razvlači kablov",
-    "razvlaci kablov",
-    "mijenjanj kablov",
-    "izmjena kablov",
-    "izmijenim kablov",
-    "izmijenit kablov",
+    "kompletna instalacij",
+    "cijela instalacij",
+    "razvlačenj",
+    "razvlacenj",
+    "provlačenj",
+    "provlacenj",
+    "štemanj",
+    "stemanj",
     "razvodne kutij",
     "razvodna kutij",
     "nova razvodna tabl",
-    "rekonstrukcij struj",
-    "rekonstrukcij instalacij",
+    "glavni osigura",
+    "glavni vod",
+    "trofazna instalacij",
     "renoviram stan",
     "renoviranj stan",
+    "rekonstrukcij struj",
+    "rekonstrukcij instalacij",
     "novi raspored utičnic",
     "novi raspored uticnic",
     "nov raspored utičnic",
     "nov raspored uticnic",
   ];
-  return triggers.some((p) => t.includes(p));
+  if (strongTriggers.some((p) => t.includes(p))) return true;
+
+  // Combined-stem: cable wires through walls or across the whole apartment.
+  if (
+    (t.includes("kabl") || t.includes("žic")) &&
+    (t.includes("u zid") || t.includes("po stan") || t.includes("u stan"))
+  ) {
+    return true;
+  }
+
+  // Wiring change verbs combined with cables.
+  if (
+    (t.includes("mijenjanj") ||
+      t.includes("izmjen") ||
+      t.includes("izmijen")) &&
+    t.includes("kabl")
+  ) {
+    return true;
+  }
+
+  // "kratki spoj" alone is B2 unless the user qualifies it as in-wall / whole
+  // apartment / inside the installation.
+  if (
+    (t.includes("kratki spoj") || t.includes("kratak spoj")) &&
+    (t.includes("u zidu") ||
+      t.includes("u stanu") ||
+      t.includes("u cijelom stan") ||
+      t.includes("u cijeloj instalacij") ||
+      t.includes("u instalacij"))
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
-// Detects demolition / removal of old item phrasing.
+// Detects demolition / removal of old item phrasing — kept for backwards
+// compatibility but no longer the primary signal. Prefer the more specific
+// detectDemolitionRequested + detectAlreadyRemovedOrReady helpers below.
 function detectDemolition(text) {
   const t = normalizeText(text);
   const triggers = [
@@ -728,6 +1067,93 @@ function detectDemolition(text) {
     "demontira star",
   ];
   return triggers.some((p) => t.includes(p));
+}
+
+// True when the user clearly requests demolition/removal of an old item.
+// Use this (not detectDemolition) to drive flow decisions.
+function detectDemolitionRequested(text) {
+  const t = normalizeText(text);
+  // Phrases that mean "removal/demolition is needed".
+  const triggers = [
+    "treba demontaž",
+    "treba demontir",
+    "treba demontira",
+    "treba skinuti star",
+    "treba ukloniti star",
+    "treba iznijeti star",
+    "skidanj starog",
+    "skidanje starog",
+    "skidanje stare",
+    "skidanje staro",
+    "demontaža starog",
+    "demontaza starog",
+    "demontaža stare",
+    "demontaza stare",
+    "demontaža staro",
+    "uklanjanj starog",
+    "ukloniti starog",
+    "iznošenj starog",
+    "iznosenj starog",
+    "iznijeti star",
+    "majstor treba demontir",
+    "treba rastavi star",
+    "treba sklonit star",
+    "treba demontaža",
+    "treba uklanjanj",
+  ];
+  return triggers.some((p) => t.includes(p));
+}
+
+// True when the user signals the work area is already ready / old item
+// already removed. Used in ASK_WORK_READY to avoid mis-tagging the answer
+// as a "demolition requested" note.
+function detectAlreadyRemovedOrReady(text) {
+  const t = normalizeText(text);
+  const triggers = [
+    "je demontiran",
+    "je demontirano",
+    "je demontirana",
+    "su demontirani",
+    "demontiran i sklonjen",
+    "demontirano i sklonjen",
+    "već demontiran",
+    "vec demontiran",
+    "već skinut",
+    "vec skinut",
+    "već uklonjen",
+    "vec uklonjen",
+    "je sklonjen",
+    "je sklonjeno",
+    "je sklonjena",
+    "je uklonjen",
+    "je uklonjeno",
+    "je uklonjena",
+    "sve je sklonjen",
+    "sve je uklonjen",
+    "sve je spremno",
+    "spreman za montaž",
+    "spremno za montaž",
+    "spremna za montaž",
+    "prostor je oslobođen",
+    "prostor je oslobodjen",
+    "prostor je spreman",
+    "već je uklonj",
+    "vec je uklonj",
+    "već je sklonj",
+    "vec je sklonj",
+  ];
+  return triggers.some((p) => t.includes(p));
+}
+
+// Pushes a clean BHS note onto session.summaryNotes (initialized lazily).
+// Internal notes (raw user text, debug labels) must never end up in the
+// client-facing summary — only these curated BHS strings are.
+function addBhsNote(session, bhsText) {
+  if (!session.summaryNotes) session.summaryNotes = [];
+  // Deduplicate identical BHS notes.
+  if (!session.summaryNotes.includes(bhsText)) {
+    session.summaryNotes.push(bhsText);
+  }
 }
 
 // True if a work-readiness answer signals the area is not ready (e.g. "ne",
@@ -922,10 +1348,43 @@ function continueInstallationsFlow(session, fromState) {
   return installationsPhotoPrompt();
 }
 
+// True if the session already carries a clean BHS note that demolition/
+// removal of an old item is part of the job.
+function sessionHasDemolitionRequestNote(session) {
+  if (!session.summaryNotes) return false;
+  return session.summaryNotes.some(
+    (n) => n.includes("demontažu") || n.includes("uklanjanj"),
+  );
+}
+
 // Initial step router after the bot recognises sub-category + item. Returns
 // the intro prompt and sets the first real question state.
 function nextAfterRecognitionInstallations(session) {
   const type = session.installationType;
+
+  // [polish-fix] If demolition was already declared up-front, skip the
+  // generic "Da li je prostor pripremljen..." question entirely — it would
+  // contradict what the user just said. Record a clean workReady value and
+  // route via the dispatcher to the next useful step.
+  if (
+    (type === "B1" || type === "B4") &&
+    sessionHasDemolitionRequestNote(session)
+  ) {
+    session.workReady =
+      "Prostor nije potpuno pripremljen — klijent traži demontažu/uklanjanje starog predmeta prije montaže/priključenja novog.";
+    const intro =
+      type === "B1"
+        ? "Bot: Dobro, trebate montažu namještaja. Razumijem da je potrebno i uklanjanje starog predmeta. "
+        : "Bot: Dobro, trebate ugradnju/priključenje uređaja. Razumijem da je potrebno i uklanjanje starog uređaja. ";
+    const next = continueInstallationsFlow(session, "ASK_WORK_READY");
+    // Strip the leading "Bot: " from the dispatcher reply so we can splice it.
+    const nextStripped = next.replace(/^Bot:\s*/, "");
+    return (
+      intro +
+      "Da bismo Vas što prije spojili sa majstorom, trebam još nekoliko informacija. " +
+      nextStripped
+    );
+  }
 
   if (type === "B1") {
     session.state = "ASK_WORK_READY";
@@ -1022,6 +1481,27 @@ function handleAskService(session, tekst) {
     return "Bot: Dobar dan! Kako Vam možemo pomoći?";
   }
 
+  // [polish-fix] Out-of-scope guards run BEFORE classifyBranch so messages
+  // like "začepljena odvodna cijev" don't fall into UNKNOWN. The guards are
+  // nuanced (local endpoint context preserves B3/B2) and won't reject small
+  // jobs.
+  if (detectOutOfScopePlumbing(tekst)) {
+    session.state = "END";
+    return (
+      "Bot: Žao nam je, trenutno ne obavljamo radove na kanalizaciji, cijevima u zidu " +
+      "niti veće vodoinstalaterske rekonstrukcije. Radimo manje vodoinstalaterske intervencije " +
+      "kao što su slavine, sifoni, ventili, fleksibilna crijeva, vodokotlići i slični vidljivi elementi."
+    );
+  }
+  if (detectOutOfScopeElectrical(tekst)) {
+    session.state = "END";
+    return (
+      "Bot: Žao nam je, trenutno ne radimo nove elektro instalacije, razvlačenje kablova, " +
+      "razvodne kutije niti rekonstrukciju struje u stanu. Radimo manje elektro intervencije " +
+      "kao što su zamjena utičnica, prekidača, osigurača i rasvjetnih tijela."
+    );
+  }
+
   const branch = classifyBranch(tekst);
 
   if (branch === "UNKNOWN") {
@@ -1046,29 +1526,14 @@ function handleAskService(session, tekst) {
     return "Bot: Koji je tačno uređaj u pitanju? (npr. veš mašina, bojler, frižider, laptop)";
   }
 
-  // INSTALLATIONS v2 polish — first run out-of-scope detection so we don't
-  // start a flow for jobs we don't accept.
-  if (detectOutOfScopePlumbing(tekst)) {
-    session.state = "END";
-    return (
-      "Bot: Žao nam je, trenutno ne obavljamo odštopavanje i radove na unutrašnjim odvodnim " +
-      "ili vodovodnim instalacijama. Radimo manje vodoinstalaterske intervencije kao što su " +
-      "slavine, sifoni, ventili, fleksibilna crijeva i vodokotlići."
+  // [polish-fix] Detect demolition/removal request up-front. Use the new
+  // nuanced helper so "stari ormar je demontiran i sklonjen" (already done)
+  // does not get tagged as a removal request.
+  if (detectDemolitionRequested(tekst)) {
+    addBhsNote(
+      session,
+      "Klijent traži demontažu/uklanjanje starog predmeta prije montaže/priključenja novog.",
     );
-  }
-  if (detectOutOfScopeElectrical(tekst)) {
-    session.state = "END";
-    return (
-      "Bot: Žao nam je, trenutno ne radimo nove elektro instalacije, razvlačenje kablova, " +
-      "razvodne kutije niti rekonstrukciju struje u stanu. Radimo manje elektro intervencije " +
-      "kao što su zamjena utičnica, prekidača i rasvjetnih tijela."
-    );
-  }
-
-  // Detect demolition/removal of an old item up-front so we don't ask a
-  // duplicate follow-up later.
-  if (detectDemolition(tekst)) {
-    session.notes.push(`demolition/removal requested (initial): ${tekst}`);
   }
 
   // Detect sub-category and item from the first message so we can skip
@@ -1215,9 +1680,10 @@ function processMessage(userId, tekst) {
       session.mountingMode = detectMountingMode(detectedItem);
     }
 
-    if (detectDemolition(tekst)) {
-      session.notes.push(
-        `demolition/removal mentioned (type-clarification): ${tekst}`,
+    if (detectDemolitionRequested(tekst)) {
+      addBhsNote(
+        session,
+        "Klijent traži demontažu/uklanjanje starog predmeta prije montaže/priključenja novog.",
       );
     }
 
@@ -1248,9 +1714,10 @@ function processMessage(userId, tekst) {
       if (detectedType) session.installationType = detectedType;
     }
 
-    if (detectDemolition(tekst)) {
-      session.notes.push(
-        `demolition/removal mentioned (item-clarification): ${tekst}`,
+    if (detectDemolitionRequested(tekst)) {
+      addBhsNote(
+        session,
+        "Klijent traži demontažu/uklanjanje starog predmeta prije montaže/priključenja novog.",
       );
     }
 
@@ -1261,8 +1728,6 @@ function processMessage(userId, tekst) {
     session.description = tekst;
     return continueInstallationsFlow(session, "ASK_PROBLEM_DESCRIPTION");
   } else if (session.state === "ASK_HAS_PART") {
-    // Record raw answer in notes. Best-effort parse into itemReady.
-    session.notes.push(`has-part: ${tekst}`);
     const lower = normalizeText(tekst);
     const userHas = [
       "imam",
@@ -1277,15 +1742,22 @@ function processMessage(userId, tekst) {
       "donese",
       "donesite",
       "donesi",
-      "ne",
       "nemam",
       "neka donese",
       "neka majstor",
     ];
     if (userHas.some((w) => lower.includes(w))) {
       session.itemReady = true;
-    } else if (majstorBrings.some((w) => lower.includes(w))) {
+      addBhsNote(
+        session,
+        "Klijent već ima dio koji treba ugraditi/zamijeniti.",
+      );
+    } else if (majstorBrings.some((w) => lower.includes(w)) || lower === "ne") {
       session.itemReady = false;
+      addBhsNote(
+        session,
+        "Klijent je naveo da majstor treba donijeti dio/materijal.",
+      );
     }
     return continueInstallationsFlow(session, "ASK_HAS_PART");
   } else if (session.state === "ASK_WALL_TYPE") {
@@ -1295,27 +1767,55 @@ function processMessage(userId, tekst) {
     session.accessInfo = tekst;
     return continueInstallationsFlow(session, "ASK_ACCESS");
   } else if (session.state === "ASK_STANDALONE_OR_BUILTIN") {
-    session.notes.push(`standalone/built-in: ${tekst}`);
+    const lower = normalizeText(tekst);
+    if (lower.includes("ugradb") || lower.includes("ugradn")) {
+      addBhsNote(session, "Uređaj je naveden kao ugradbeni.");
+    } else if (lower.includes("samostoj") || lower.includes("slobod")) {
+      addBhsNote(session, "Uređaj je naveden kao samostojeći.");
+    }
     return continueInstallationsFlow(session, "ASK_STANDALONE_OR_BUILTIN");
   } else if (session.state === "ASK_WORK_READY") {
     session.workReady = tekst;
 
-    // Note any demolition mention in the answer itself.
-    if (detectDemolition(tekst)) {
-      session.notes.push(`demolition/removal mentioned (work_ready): ${tekst}`);
+    // [polish-fix] Distinguish "old item is already removed" (work area is
+    // ready) from "demolition still needs to happen". Only the latter
+    // qualifies as a demolition request worth a separate note.
+    const alreadyRemoved = detectAlreadyRemovedOrReady(tekst);
+    const askingForDemolition =
+      detectDemolitionRequested(tekst) ||
+      (detectDemolition(tekst) && !alreadyRemoved);
+
+    if (askingForDemolition) {
+      addBhsNote(
+        session,
+        "Klijent traži demontažu/uklanjanje starog predmeta prije montaže/priključenja novog.",
+      );
     }
 
-    const alreadyNotedDemolition = session.notes.some((n) =>
-      n.startsWith("demolition/removal"),
-    );
-    if (isNegativeWorkReadyAnswer(tekst) && !alreadyNotedDemolition) {
+    const alreadyNotedDemolition = sessionHasDemolitionRequestNote(session);
+    if (
+      isNegativeWorkReadyAnswer(tekst) &&
+      !alreadyNotedDemolition &&
+      !alreadyRemoved
+    ) {
       session.state = "ASK_DEMOLITION_FOLLOWUP";
       return "Bot: Da li Vam je potrebno uklanjanje/demontaža starog predmeta prije montaže/priključenja novog?";
     }
 
     return continueInstallationsFlow(session, "ASK_WORK_READY");
   } else if (session.state === "ASK_DEMOLITION_FOLLOWUP") {
-    session.notes.push(`demolition follow-up answer: ${tekst}`);
+    const lower = normalizeText(tekst);
+    if (
+      lower === "da" ||
+      lower.startsWith("da ") ||
+      lower.startsWith("da,") ||
+      lower.includes("treba")
+    ) {
+      addBhsNote(
+        session,
+        "Klijent traži demontažu/uklanjanje starog predmeta prije montaže/priključenja novog.",
+      );
+    }
     return continueInstallationsFlow(session, "ASK_DEMOLITION_FOLLOWUP");
   } else if (session.state === "ASK_DIMENSIONS") {
     session.dimensions = tekst;
@@ -1431,19 +1931,39 @@ function processMessage(userId, tekst) {
         lines.push(`Predmet/intervencija: ${session.itemName}`);
       if (session.description)
         lines.push(`Opis problema: ${session.description}`);
+      if (session.workReady)
+        lines.push(`Prostor pripremljen: ${session.workReady}`);
+      // [polish-fix] Napomene — only the curated BHS notes from summaryNotes,
+      // and only those whose meaning isn't already implied by workReady.
+      if (session.summaryNotes && session.summaryNotes.length > 0) {
+        const workReadyLower = normalizeText(session.workReady || "");
+        const usefulNotes = session.summaryNotes.filter((note) => {
+          // Skip demolition note if workReady already conveys it.
+          const isDemoNote =
+            note.includes("demontažu") || note.includes("uklanjanj");
+          if (
+            isDemoNote &&
+            (workReadyLower.includes("demontir") ||
+              workReadyLower.includes("demontaž") ||
+              workReadyLower.includes("uklanjanj") ||
+              workReadyLower.includes("uklonjen") ||
+              workReadyLower.includes("sklonjen") ||
+              workReadyLower.includes("klijent traži demontažu"))
+          ) {
+            return false;
+          }
+          return true;
+        });
+        if (usefulNotes.length > 0) {
+          lines.push(`Napomene: ${usefulNotes.join(" ")}`);
+        }
+      }
       if (session.wallType) lines.push(`Zid/površina: ${session.wallType}`);
       if (session.accessInfo)
         lines.push(`Pristup instalacijama: ${session.accessInfo}`);
       if (session.brand) lines.push(`Brend: ${session.brand}`);
       if (session.model) lines.push(`Model: ${session.model}`);
-      if (session.workReady)
-        lines.push(`Prostor pripremljen: ${session.workReady}`);
       if (session.dimensions) lines.push(`Dimenzije: ${session.dimensions}`);
-      if (session.floorInfo) lines.push(`Sprat/lift: ${session.floorInfo}`);
-      if (session.parkingInfo) lines.push(`Parking: ${session.parkingInfo}`);
-      if (session.notes && session.notes.length > 0) {
-        lines.push(`Napomene: ${session.notes.join(" | ")}`);
-      }
       lines.push(`Broj fotografija: ${photoCount}`);
       lines.push(`Telefon: ${session.phone}`);
       if (session.location) lines.push(`Lokacija/adresa: ${session.location}`);

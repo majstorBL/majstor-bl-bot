@@ -125,9 +125,16 @@ function classifyBranch(text) {
     "plafonjer",
     "rasvjetn",
     "grlo sijal",
+    "grlo",
+    "sijalic",
+    "žarulj",
+    "zarulj",
     "svjetlo",
     "svijetlo",
     "svetlo",
+    "svjetl",
+    "svijetl",
+    "svetl",
     "ne radi svjetlo",
     "ne radi svijetlo",
     "ne radi svetlo",
@@ -418,6 +425,8 @@ function extractInstallationType(text) {
     "montira",
     "namontir",
     "instalacij",
+    "postav",
+    "postavlj",
     "kupio",
     "kupili",
     "kupila",
@@ -449,8 +458,10 @@ function extractInstallationType(text) {
     "elektricni sporet",
     "električni štednjak",
     "elektricni stednjak",
-    "ploča",
-    "ploca",
+    // [fix-2] Stem-based ploč* covers ploča/ploče/ploči/ploču/plocu in all
+    // BHS declensions ("ploče za kuhanje", "ploču za kuhanje", etc.).
+    "ploč",
+    "ploc",
     "indukciona ploč",
     "indukciona ploc",
     "ugradbena ploč",
@@ -483,7 +494,10 @@ function extractInstallationType(text) {
     "zamrziv",
     "frižider",
     "frizider",
+    // [fix-2] napa/napu/nape covers BHS declensions of "napa".
     "napa",
+    "napu",
+    "nape",
   ];
   const hasInstall = installIntent.some((w) => input.includes(w));
   const hasDevice = devices.some((w) => input.includes(w));
@@ -743,11 +757,11 @@ function extractInstallationItem(text) {
     { keywords: ["umivaonik"], item: "umivaonik" },
     { keywords: ["sudoper"], item: "sudoper" },
     { keywords: ["kada"], item: "kada" },
-    { keywords: ["napa"], item: "napa" },
+    { keywords: ["napa", "napu", "nape"], item: "napa" },
     { keywords: ["bojler"], item: "bojler" },
     { keywords: ["štednjak", "stednjak"], item: "štednjak" },
     { keywords: ["šporet", "sporet"], item: "šporet" },
-    { keywords: ["ploča", "ploca"], item: "ploča" },
+    { keywords: ["ploč", "ploc"], item: "ploča" },
     { keywords: ["mašin", "masin"], item: "mašina" },
     { keywords: ["klima"], item: "klima uređaj" },
     { keywords: ["zamrziv"], item: "zamrzivač" },
@@ -1073,14 +1087,28 @@ function detectDemolition(text) {
 // Use this (not detectDemolition) to drive flow decisions.
 function detectDemolitionRequested(text) {
   const t = normalizeText(text);
-  // Phrases that mean "removal/demolition is needed".
-  const triggers = [
+
+  // [fix-2] If the user is signalling "already removed / area is ready",
+  // do NOT treat that as a request for demolition. The check inside ASK_
+  // WORK_READY already guards this too, but we double-protect here so the
+  // up-front detector doesn't push a false note from "Stari ormar je
+  // demontiran i sklonjen.".
+  if (detectAlreadyRemovedOrReady(t)) return false;
+
+  // Direct trigger phrases — explicit "removal/demolition is needed" wording.
+  const directTriggers = [
     "treba demontaž",
     "treba demontir",
     "treba demontira",
+    "trebam demontaž",
+    "trebam demontir",
     "treba skinuti star",
     "treba ukloniti star",
     "treba iznijeti star",
+    "treba rastavi",
+    "treba rastav",
+    "treba rastavljanj",
+    "trebam rastav",
     "skidanj starog",
     "skidanje starog",
     "skidanje stare",
@@ -1090,18 +1118,57 @@ function detectDemolitionRequested(text) {
     "demontaža stare",
     "demontaza stare",
     "demontaža staro",
+    "demontažu starog",
+    "demontazu starog",
+    "demontažu stare",
+    "demontazu stare",
+    "demontažu ormara",
+    "demontazu ormara",
+    "demontažu starog ormara",
+    "demontazu starog ormara",
+    "rastavljanje starog",
+    "rastavljanj starog",
     "uklanjanj starog",
     "ukloniti starog",
+    "uklon starog",
     "iznošenj starog",
     "iznosenj starog",
     "iznijeti star",
     "majstor treba demontir",
-    "treba rastavi star",
     "treba sklonit star",
     "treba demontaža",
+    "trebam demontažu",
+    "trebam demontazu",
+    "potrebna demontaža",
+    "potrebna demontaza",
+    "potrebno uklanjanj",
     "treba uklanjanj",
+    "rastavljate li",
+    "stari treba sklonit",
+    "stari treba ukloni",
+    "stari treba iznij",
   ];
-  return triggers.some((p) => t.includes(p));
+  if (directTriggers.some((p) => t.includes(p))) return true;
+
+  // [fix-2] Word-order variations — "stari/stara/staro/starog ... treba ...
+  // <demolition verb>" and "da prvo stari rastavite". BHS lets the object
+  // come before the verb, so the simple substring list above misses these.
+  const oldItemMentioned = /\bstar(?:i|a|o|e|u|og|oj|om|ih|im|u)?\b/i.test(t);
+  const demolitionVerb =
+    /(rastavi|rastav(?:lj)?|demonti|demontaž|demontaz|ukloni|sklon|iznij|iznes|skid)/i.test(
+      t,
+    );
+  const needsIntent =
+    /\b(treba|trebam|trebamo|treba mi|hocu|hoću|želim|zelim|prvo|moramo)\b/i.test(
+      t,
+    );
+  if (oldItemMentioned && demolitionVerb && needsIntent) return true;
+
+  // "Da prvo stari rastavite" — short form, no explicit "treba".
+  if (/\bprvo\b.*\bstar/i.test(t) && demolitionVerb) return true;
+  if (/\bstar.*\bprvo\b/i.test(t) && demolitionVerb) return true;
+
+  return false;
 }
 
 // True when the user signals the work area is already ready / old item

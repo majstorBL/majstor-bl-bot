@@ -52,6 +52,55 @@ function normalizeText(text) {
 function classifyBranch(text) {
   const input = normalizeText(text);
 
+  // [4c-UX-keyword-matrix] DEVICES priority guard — an appliance fault that
+  // is described together with an electrical symptom (e.g. a washing machine
+  // that trips the fuse) is a DEVICE repair, NOT an electrical installation.
+  // This must run BEFORE the INSTALLATIONS intent pre-check so phrases like
+  // "izbacuje osigurač" don't misroute the appliance fault to B2/B3.
+  // Requires BOTH an appliance device phrase AND a fault phrase, so a purely
+  // local electrical case ("Izbacuje osigurač kad upalim svjetlo.") — which
+  // has no appliance phrase — correctly stays in INSTALLATIONS (B2).
+  const applianceDevicePhrases = [
+    "veš maš",
+    "ves mas",
+    "veš mašin",
+    "ves masin",
+    "mašina",
+    "masina",
+    "mašin",
+    "masin",
+    "sudomašin",
+    "sudomasin",
+    "frižider",
+    "frizider",
+    "bojler",
+    "šporet",
+    "sporet",
+    "štednjak",
+    "stednjak",
+  ];
+  const applianceFaultPhrases = [
+    "izbacuje osigura",
+    "izbaci osigura",
+    "iskače osigura",
+    "iskace osigura",
+    "pada osigura",
+    "ispada osigura",
+    "kad je uključim",
+    "kad je ukljucim",
+    "kad uključim",
+    "kad ukljucim",
+    "kad stisnem dugme",
+    "kada stisnem dugme",
+    "dugme za paljenje",
+  ];
+  if (
+    applianceDevicePhrases.some((d) => input.includes(d)) &&
+    applianceFaultPhrases.some((f) => input.includes(f))
+  ) {
+    return "DEVICES";
+  }
+
   // [4c-UX] INSTALLATIONS intent pre-check — stems that unambiguously signal
   // an installation/montage request even when a device name also appears in
   // the text. Example: "Kupio sam bojler, treba ugradnja" must route to
@@ -407,6 +456,11 @@ function extractInstallationType(text) {
     "tus baterij",
     "tuš kabin",
     "tus kabin",
+    // [4c-UX-keyword-matrix] "tuš kad" covers tuš kada/kadu/kade — a real
+    // bathtub/shower-tray plumbing item. Plain "kada" is intentionally NOT
+    // listed because it also means "when" in BHS (false positives).
+    "tuš kad",
+    "tus kad",
     "fleksibiln",
     "fleks crijev",
     "lavabo",
@@ -516,7 +570,15 @@ function extractInstallationType(text) {
     "tus baterij",
     "tuš kabin",
     "tus kabin",
-    "kada",
+    // [4c-UX-keyword-matrix] Bathtub/shower-tray: unambiguous declined forms
+    // only (kadu/kade/kadi/kadom) plus the "tuš kad" phrase. Plain "kada" is
+    // omitted on purpose — it collides with the temporal word "kada" = "when".
+    "tuš kad",
+    "tus kad",
+    "kadu",
+    "kade",
+    "kadi",
+    "kadom",
     "vodokotlić",
     "vodokotlic",
     "wc kotlić",
@@ -589,8 +651,8 @@ function extractInstallationType(text) {
     "pada osigura",
     "kratki spoj",
     "kratak spoj",
-    "tv nosač",
-    "tv nosac",
+    // [4c-UX-keyword-matrix] "tv nosač" intentionally removed from B2 — a TV
+    // wall mount is furniture-style wall-mounting work, handled as B1 below.
     "električn",
     "elektricn",
     "struj",
@@ -618,6 +680,15 @@ function extractInstallationType(text) {
     "garnis",
     "stalaž",
     "stalaz",
+    // [4c-UX-keyword-matrix] TV wall mount = furniture-style wall mounting.
+    "tv nosač",
+    "tv nosac",
+    "nosač za tv",
+    "nosac za tv",
+    // [4c-UX-keyword-matrix] Kitchen furniture (cabinets / hanging units /
+    // kitchen block). Checked AFTER B4 (device install) and B3 (plumbing),
+    // so "kuhinjsku napu" → B4 and "pipa u kuhinji" → B3 still win.
+    "kuhinj",
   ];
   if (b1Keywords.some((w) => input.includes(w))) return "B1";
 
@@ -756,7 +827,11 @@ function extractInstallationItem(text) {
     { keywords: ["lavabo"], item: "lavabo" },
     { keywords: ["umivaonik"], item: "umivaonik" },
     { keywords: ["sudoper"], item: "sudoper" },
-    { keywords: ["kada"], item: "kada" },
+    // [4c-UX-keyword-matrix] Bathtub/shower tray — unambiguous forms only.
+    {
+      keywords: ["tuš kad", "tus kad", "kadu", "kade", "kadi", "kadom"],
+      item: "tuš kada",
+    },
     { keywords: ["napa", "napu", "nape"], item: "napa" },
     { keywords: ["bojler"], item: "bojler" },
     { keywords: ["štednjak", "stednjak"], item: "štednjak" },
@@ -775,6 +850,28 @@ function extractInstallationItem(text) {
     { keywords: ["ladič", "ladic"], item: "ladičar" },
     { keywords: ["stalaž", "stalaz"], item: "stalaža" },
     { keywords: ["stolic"], item: "stolica" },
+    // [4c-UX-keyword-matrix] Kitchen furniture. Specific phrases first; the
+    // bare "kuhinjski element" / declined "kuhinjskih elemenata" still resolve
+    // via the existing element entry / combined fallback below.
+    {
+      keywords: ["kuhinjski blok", "kuhinjskog blok", "kuhinjsk blok"],
+      item: "kuhinjski blok",
+    },
+    {
+      keywords: [
+        "viseća kuhinj",
+        "viseca kuhinj",
+        "viseću kuhinj",
+        "visecu kuhinj",
+        "viseće kuhinj",
+        "visece kuhinj",
+      ],
+      item: "viseća kuhinja",
+    },
+    { keywords: ["kuhinju", "kuhinje", "kuhinja"], item: "kuhinja" },
+    // [4c-UX-keyword-matrix] Generic furniture fallback so "rastavljanje
+    // starog namještaja" yields a non-null item and skips ASK_ITEM_NAME.
+    { keywords: ["namještaj", "namjesta"], item: "namještaj" },
   ];
 
   for (const entry of items) {
@@ -1153,16 +1250,26 @@ function detectDemolitionRequested(text) {
   // [fix-2] Word-order variations — "stari/stara/staro/starog ... treba ...
   // <demolition verb>" and "da prvo stari rastavite". BHS lets the object
   // come before the verb, so the simple substring list above misses these.
-  const oldItemMentioned = /\bstar(?:i|a|o|e|u|og|oj|om|ih|im|u)?\b/i.test(t);
+  // [4c-UX-keyword-matrix] Verb set widened to also cover "uklanj"
+  // (uklanjanje), "skinu" (skinuti), "skid" (skidanje), "iznoš" (iznošenje).
+  const oldItemMentioned = /\bstar(?:i|a|o|e|u|og|oj|om|ih|im)?\b/i.test(t);
   const demolitionVerb =
-    /(rastavi|rastav(?:lj)?|demonti|demontaž|demontaz|ukloni|sklon|iznij|iznes|skid)/i.test(
+    /(rastav|demonti|demontaž|demontaz|ukloni|uklanj|sklon|iznij|iznes|iznoš|skid|skinu)/i.test(
       t,
     );
   const needsIntent =
-    /\b(treba|trebam|trebamo|treba mi|hocu|hoću|želim|zelim|prvo|moramo)\b/i.test(
+    /\b(treba|trebam|trebamo|treba mi|hocu|hoću|želim|zelim|prvo|moramo|moram)\b/i.test(
       t,
     );
   if (oldItemMentioned && demolitionVerb && needsIntent) return true;
+
+  // [4c-UX-keyword-matrix] Removal verb + explicit new replacement — e.g.
+  // "Trebam uklanjanje regala i montažu novog." The item being removed is
+  // implicitly the old one even when the word "star" never appears. The
+  // already-removed/ready guard at the top prevents false positives on
+  // "Stari ... je već uklonjen, treba montirati novi."
+  const newReplacement = /\bnov(?:i|a|o|e|u|og|om|oj|ih|im)?\b/i.test(t);
+  if (demolitionVerb && newReplacement && needsIntent) return true;
 
   // "Da prvo stari rastavite" — short form, no explicit "treba".
   if (/\bprvo\b.*\bstar/i.test(t) && demolitionVerb) return true;
@@ -1400,14 +1507,20 @@ function continueInstallationsFlow(session, fromState) {
     return installationsPhotoPrompt();
   }
 
+  // [4c-UX-keyword-matrix] ASK_HAS_PART is DISABLED in the active v2 B2/B3
+  // flow: asking "Da li već imate dio..." right after the problem description
+  // added UX friction without clear value. The state + handler are kept in the
+  // file for a possible V3 reintroduction, but this dispatcher no longer routes
+  // into ASK_HAS_PART. The branch below is therefore unreachable in v2.
   if (fromState === "ASK_HAS_PART") {
     session.state = "ASK_ACCESS";
     return buildAccessQuestionForInstallations(session);
   }
 
   if (fromState === "ASK_PROBLEM_DESCRIPTION") {
-    session.state = "ASK_HAS_PART";
-    return "Bot: Razumijem. Da li već imate dio koji treba ugraditi/zamijeniti, ili majstor treba da ga donese?";
+    // v2: go straight to the access question, skipping ASK_HAS_PART.
+    session.state = "ASK_ACCESS";
+    return buildAccessQuestionForInstallations(session);
   }
 
   // Fallback — should not happen.

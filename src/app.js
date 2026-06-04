@@ -212,6 +212,81 @@ function classifyBranch(text) {
     return "INSTALLATIONS";
   }
 
+  // [4d-UX] DEVICES fault guard — a recognized appliance/electronics phrase
+  // described together with a fault symptom is a DEVICE repair, even when a
+  // word like "električna" would otherwise look like an installation keyword.
+  // Runs AFTER the installation-intent pre-check, so explicit install verbs
+  // ("ugradnja ploče") still win. Requires BOTH a device phrase AND a fault
+  // phrase, so generic faults ("imam problem", "neće") never route here alone.
+  const deviceFaultDevicePhrases = [
+    "indukciona ploč",
+    "indukciona ploc",
+    "električna ploč",
+    "elektricna ploc",
+    "frižider",
+    "frizider",
+    "frižder",
+    "frizder",
+    "zamrzivač",
+    "zamrzivac",
+    "škrinja",
+    "skrinja",
+    "sušilica",
+    "susilica",
+    "printer",
+    "štampač",
+    "stampač",
+    "stampac",
+    "šparet",
+    "sparet",
+    "šporet",
+    "sporet",
+    "štednjak",
+    "stednjak",
+    "veš maš",
+    "ves mas",
+    "sudomašin",
+    "sudomasin",
+    "bojler",
+    "televizor",
+    "laptop",
+    "loptop",
+    "računar",
+    "racunar",
+    "monitor",
+    "usisivač",
+  ];
+  const deviceFaultPhrases = [
+    "ne radi",
+    "neće da radi",
+    "nece da radi",
+    "neće da se pokrene",
+    "nece da se pokrene",
+    "ne uključuje",
+    "ne ukljucuje",
+    "neće da se upali",
+    "nece da se upali",
+    "ne pali",
+    "gasi se",
+    "pokvaren",
+    "u kvaru",
+    "izbacuje grešku",
+    "izbacuje gresku",
+    "nema sliku",
+    "ne prikazuje sliku",
+    "ne štampa",
+    "ne stampa",
+    "ne hladi",
+    "ne grije",
+    "ne izbacuje vodu",
+  ];
+  if (
+    deviceFaultDevicePhrases.some((d) => input.includes(d)) &&
+    deviceFaultPhrases.some((f) => input.includes(f))
+  ) {
+    return "DEVICES";
+  }
+
   const deviceKeywords = [
     "mašina",
     "veš",
@@ -246,6 +321,20 @@ function classifyBranch(text) {
     "uređaj",
     "klima",
     "zamrzivač",
+    // [4d-UX] extra DEVICES variants / typos
+    "škrinja",
+    "skrinja",
+    "sušilica",
+    "susilica",
+    "frižder",
+    "frizder",
+    "printer",
+    "štampač",
+    "stampač",
+    "stampac",
+    "šparet",
+    "sparet",
+    "loptop",
   ];
 
   const installationKeywords = [
@@ -319,6 +408,10 @@ function extractDeviceType(text) {
         "masina za posudja",
         "perilica suđa",
         "perilica posuđa",
+        "perilica posudja",
+        "perilica za posuđe",
+        "perilica za posudje",
+        "sudna perilica",
         "suđerica",
         "sudjerica",
         "suđe",
@@ -329,6 +422,12 @@ function extractDeviceType(text) {
         "dishwasher",
       ],
       type: "sudomašina",
+    },
+    // Tumble dryer must be checked before washing machine — "sušilica veša"
+    // contains "veš", which would otherwise match the washing-machine entry.
+    {
+      keywords: ["sušilica veša", "susilica vesa", "sušilica", "susilica"],
+      type: "sušilica",
     },
     {
       keywords: [
@@ -342,12 +441,31 @@ function extractDeviceType(text) {
       ],
       type: "veš mašina",
     },
-    { keywords: ["zamrzivač"], type: "zamrzivač" },
-    { keywords: ["frižider", "hladnjak", "frizider"], type: "frižider" },
+    // Induction / electric hob — multi-word phrases checked before generic ones.
+    {
+      keywords: ["indukciona ploča", "indukciona ploca"],
+      type: "indukciona ploča",
+    },
+    {
+      keywords: ["električna ploča", "elektricna ploca"],
+      type: "električna ploča",
+    },
+    { keywords: ["zamrzivač", "škrinja", "skrinja"], type: "zamrzivač" },
+    {
+      keywords: ["frižider", "hladnjak", "frizider", "frižder", "frizder"],
+      type: "frižider",
+    },
     { keywords: ["bojler", "boiler", "grijač"], type: "bojler" },
-    { keywords: ["šporet", "štednjak", "rerma"], type: "šporet" },
+    {
+      keywords: ["šporet", "šparet", "sparet", "štednjak", "rerma"],
+      type: "šporet",
+    },
+    {
+      keywords: ["printer", "štampač", "stampač", "stampac", "štampac"],
+      type: "printer",
+    },
     { keywords: ["televizor", "televizija", "tv"], type: "televizor" },
-    { keywords: ["laptop"], type: "laptop" },
+    { keywords: ["laptop", "loptop"], type: "laptop" },
     { keywords: ["kompjuter", "računar", "pc"], type: "računar" },
     { keywords: ["monitor"], type: "monitor" },
     { keywords: ["usisivač"], type: "usisivač" },
@@ -389,6 +507,10 @@ function getDeviceInstrumental(deviceType) {
     zamrzivač: "zamrzivačem",
     sudomašina: "sudomašinom",
     "veš mašina": "veš mašinom",
+    sušilica: "sušilicom",
+    printer: "printerom",
+    "indukciona ploča": "indukcionom pločom",
+    "električna ploča": "električnom pločom",
     televizor: "televizorom",
     računar: "računarom",
     laptop: "laptopom",
@@ -419,6 +541,37 @@ function getModelHint(deviceType) {
   return (
     hints[deviceType] ||
     "Model možete naći na naljepnici uređaja ili računu o kupovini."
+  );
+}
+
+// [4d-UX] Returns true only for devices where "ugradbeni vs samostojeći"
+// actually changes the intervention (built-in kitchen appliances, hobs,
+// kitchen boilers). For računar, laptop, monitor, TV, printer and similar,
+// this question is irrelevant — we skip straight to the photo step.
+function shouldAskDeviceInstallType(deviceType) {
+  const relevant = [
+    "sudomašina",
+    "veš mašina",
+    "sušilica",
+    "frižider",
+    "zamrzivač",
+    "šporet",
+    "električna ploča",
+    "indukciona ploča",
+    "bojler",
+  ];
+  return relevant.includes(deviceType);
+}
+
+// [4d-UX] Standard DEVICES photo step prompt — aligned with the INSTALLATIONS
+// photo prompt: max 2 photos, video not supported, "Dalje" guidance. Quick
+// Reply ("➡️ Dalje") is attached in the Messenger webhook when state is
+// ASK_PHOTOS.
+function devicesPhotoPrompt() {
+  return (
+    "Bot: Hvala. Ako želite, pošaljite fotografiju uređaja, mjesta kvara ili " +
+    "naljepnice sa modelom kroz Messenger (maksimalno 2 fotografije). " +
+    "Video trenutno nije podržan. Ako ne želite poslati fotografiju, kliknite Dalje."
   );
 }
 
@@ -1831,9 +1984,16 @@ function processMessage(userId, tekst) {
     return "Bot: Razumijem. Da li se problem javlja stalno ili povremeno?";
   } else if (session.state === "ASK_FAULT_PATTERN") {
     session.faultPattern = tekst;
-    // DEVICES v2: go directly to install-type question; location moved to contact block
-    session.state = "ASK_INSTALL_TYPE";
-    return "Bot: Dobro. Da li je uređaj ugradbeni ili samostojeći, i u kojem dijelu prostora se nalazi? (npr. kuhinja, kupatilo, ostava)";
+    // [4d-UX] Ask "ugradbeni/samostojeći" ONLY for devices where it matters
+    // (built-in kitchen appliances). The room/location question was removed —
+    // address is collected later in the contact block. Other devices skip
+    // straight to the photo step.
+    if (shouldAskDeviceInstallType(session.deviceType)) {
+      session.state = "ASK_INSTALL_TYPE";
+      return "Bot: Dobro. Da li je uređaj ugradbeni ili samostojeći?";
+    }
+    session.state = "ASK_PHOTOS";
+    return devicesPhotoPrompt();
   } else if (session.state === "ASK_LOCATION") {
     // Contact-block location step — shared by DEVICES v2 and INSTALLATIONS v2.
     // Optional in both branches: user can type "dalje" to skip.
@@ -1845,7 +2005,7 @@ function processMessage(userId, tekst) {
   } else if (session.state === "ASK_INSTALL_TYPE") {
     session.installType = tekst;
     session.state = "ASK_PHOTOS";
-    return "Bot: Hvala. Ako želite, možete nam poslati fotografiju uređaja, mjesta kvara ili naljepnice sa modelom (maksimalno 2 fotografije). Ako nemate fotografiju, napišite Dalje.";
+    return devicesPhotoPrompt();
 
     // ── INSTALLATIONS v2 polish state machine ────────────────────────────────
   } else if (session.state === "ASK_INSTALLATION_TYPE") {
@@ -2084,7 +2244,7 @@ function processMessage(userId, tekst) {
     if (session.branch === "INSTALLATIONS") {
       return "Bot: Možete li poslati adresu ili lokaciju gdje bi se radovi obavljali? Ako ne želite tačnu adresu, napišite samo naselje ili dio grada. Ako želite preskočiti, napišite Dalje.";
     }
-    return "Bot: Možete li poslati adresu ili lokaciju gdje se uređaj nalazi? Ako ne želite tačnu adresu, napišite samo naselje ili dio grada. Ako želite preskočiti, napišite Dalje.";
+    return "Bot: Možete li poslati adresu ili naselje gdje bi serviser trebao doći? Ako ne želite tačnu adresu, napišite samo naselje ili dio grada. Ako želite preskočiti, napišite Dalje.";
   } else if (session.state === "ASK_NAME") {
     // Optional — "dalje" skips name; summary is generated immediately after
     if (normalizeText(tekst) !== "dalje") {
@@ -2157,7 +2317,11 @@ ${lines.join("\n")}
 Naš majstor će Vas kontaktirati u najkraćem roku!`;
     }
 
-    // DEVICES summary (v2 — unchanged wording)
+    // DEVICES summary (v2). installType is only collected for built-in
+    // appliances (shouldAskDeviceInstallType), so show it only when present.
+    const deviceInstallLine = session.installType
+      ? `\nTip uređaja: ${session.installType}`
+      : "";
     return `Bot: Hvala Vam! Vaš zahtjev je primljen.
 
 --- REZIME ---
@@ -2165,8 +2329,7 @@ Uređaj: ${session.deviceType || session.service}
 Brend: ${session.brand}
 Model: ${session.model}
 Problem: ${session.description}
-Učestalost kvara: ${session.faultPattern}
-Tip/lokacija uređaja: ${session.installType}
+Učestalost kvara: ${session.faultPattern}${deviceInstallLine}
 Broj fotografija: ${photoCount}
 Telefon: ${session.phone}
 Lokacija/adresa: ${session.location || "—"}

@@ -1,5 +1,7 @@
 const express = require("express");
 const https = require("https"); // built-in Node.js module — no install needed
+const dns = require("dns"); // [5c] force IPv4-first DNS so Gmail SMTP works on Render
+dns.setDefaultResultOrder("ipv4first"); // avoids IPv6 ENETUNREACH on Render
 const nodemailer = require("nodemailer"); // technician email notification (Task [5])
 const app = express();
 

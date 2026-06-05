@@ -1,5 +1,6 @@
 const express = require("express");
 const https = require("https"); // built-in Node.js module — no install needed
+const nodemailer = require("nodemailer"); // technician email notification (Task [5])
 const app = express();
 
 // Multi-user session store — each user gets their own session object
@@ -38,7 +39,9 @@ function createSession() {
     location: null,
     photos: [],
     notes: [], // fallback info, additional remarks, reserved for future AI use
+    summaryNotes: [], // clean BHS notes for display/email summary (Task [5])
     contact: null, // legacy — retained for backwards compatibility, unused by v2 flow
+    emailSent: false, // prevents duplicate technician email notifications (Task [5])
   };
 }
 
@@ -1912,6 +1915,141 @@ function describeIntervention(session) {
   return "intervenciju";
 }
 
+// ── Technician email notification (Task [5]) ───────────────────────────────
+// Builds a plain-text email summary of a completed request. Returns
+// { subject, text }. Pure function — does not touch the session or network,
+// so it is safe to unit-test in isolation.
+function buildTechnicianEmail(session) {
+  const dash = "—";
+  const branch = session.branch || dash;
+  const timestamp = new Date().toISOString();
+
+  const typeLabels = {
+    B1: "B1 — montaža namještaja",
+    B2: "B2 — manja elektro intervencija",
+    B3: "B3 — manja vodoinstalaterska intervencija",
+    B4: "B4 — ugradnja/priključenje uređaja",
+  };
+
+  // Guard for old sessions that may predate the summaryNotes field.
+  const summaryNotes = Array.isArray(session.summaryNotes)
+    ? session.summaryNotes
+    : [];
+  const photos = Array.isArray(session.photos) ? session.photos : [];
+  const location = session.location || dash;
+
+  // ── Subject line ──────────────────────────────────────────────────────
+  let subjectDetail;
+  if (branch === "DEVICES") {
+    subjectDetail = session.deviceType || session.service || "uređaj";
+  } else if (branch === "INSTALLATIONS") {
+    subjectDetail =
+      typeLabels[session.installationType] ||
+      session.installationType ||
+      "intervencija";
+  } else {
+    subjectDetail = "zahtjev";
+  }
+  const subjectLocation = session.location || "bez lokacije";
+  const subject = `[NOVI ZAHTJEV] ${branch} — ${subjectDetail} — ${subjectLocation}`;
+
+  // ── Request body lines ────────────────────────────────────────────────
+  const lines = [];
+  lines.push("NOVI ZAHTJEV — MAJSTOR BANJA LUKA");
+  lines.push("");
+  lines.push(`Vrijeme prijave: ${timestamp}`);
+  lines.push(`Branch: ${branch}`);
+  lines.push("");
+  lines.push("--- PODACI O ZAHTJEVU ---");
+
+  if (branch === "DEVICES") {
+    lines.push(`Uređaj: ${session.deviceType || session.service || dash}`);
+    lines.push(`Brend: ${session.brand || dash}`);
+    lines.push(`Model: ${session.model || dash}`);
+    lines.push(`Problem: ${session.description || dash}`);
+    lines.push(`Učestalost kvara: ${session.faultPattern || dash}`);
+    lines.push(`Tip uređaja: ${session.installType || dash}`);
+  } else if (branch === "INSTALLATIONS") {
+    lines.push(
+      `Vrsta radova: ${
+        typeLabels[session.installationType] ||
+        session.installationType ||
+        dash
+      }`,
+    );
+    lines.push(`Predmet/intervencija: ${session.itemName || dash}`);
+    lines.push(`Opis problema: ${session.description || dash}`);
+    lines.push(`Prostor pripremljen: ${session.workReady || dash}`);
+    lines.push(
+      `Napomene: ${summaryNotes.length > 0 ? summaryNotes.join(" ") : dash}`,
+    );
+    lines.push(`Zid/površina: ${session.wallType || dash}`);
+    lines.push(`Pristup instalacijama: ${session.accessInfo || dash}`);
+    lines.push(`Brend: ${session.brand || dash}`);
+    lines.push(`Model: ${session.model || dash}`);
+    lines.push(`Dimenzije: ${session.dimensions || dash}`);
+  } else {
+    lines.push(`Usluga: ${session.service || dash}`);
+  }
+
+  lines.push("");
+  lines.push("--- KONTAKT ---");
+  lines.push(`Telefon: ${session.phone || dash}`);
+  lines.push(`Lokacija/adresa: ${location}`);
+  lines.push(`Ime: ${session.name || dash}`);
+
+  lines.push("");
+  lines.push("--- FOTOGRAFIJE ---");
+  lines.push(`Broj fotografija: ${photos.length}`);
+  if (photos.length === 0) {
+    lines.push("Nema fotografija.");
+  } else {
+    photos.forEach((url, i) => lines.push(`${i + 1}. ${url}`));
+  }
+
+  return { subject, text: lines.join("\n") };
+}
+
+// Sends the technician notification email. NON-BLOCKING, SAFE, IDEMPOTENT:
+// callers do not await it, it never throws, it skips silently when env vars
+// are missing, and it marks emailSent only after a successful send so a failed
+// attempt can be retried in the future.
+async function sendSummaryEmail(session) {
+  if (!session || session.emailSent) return;
+
+  const { EMAIL_USER, EMAIL_PASS, EMAIL_TO } = process.env;
+  if (!EMAIL_USER || !EMAIL_PASS || !EMAIL_TO) {
+    console.warn(
+      "Email notification skipped: missing EMAIL_USER, EMAIL_PASS or EMAIL_TO.",
+    );
+    return;
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: EMAIL_USER,
+        pass: EMAIL_PASS,
+      },
+    });
+
+    const email = buildTechnicianEmail(session);
+
+    await transporter.sendMail({
+      from: EMAIL_USER,
+      to: EMAIL_TO,
+      subject: email.subject,
+      text: email.text,
+    });
+
+    session.emailSent = true;
+    console.log("Technician email notification sent.");
+  } catch (err) {
+    console.error("Technician email notification failed:", err.message);
+  }
+}
+
 // ── Core chatbot logic ─────────────────────────────────────────────────────
 // Receives a userId and the user's text, runs it through the state machine,
 // and returns the bot's reply as a string (with "Bot: " prefix).
@@ -2310,11 +2448,17 @@ function processMessage(userId, tekst) {
       if (session.name) lines.push(`Ime: ${session.name}`);
       lines.push("----------------");
 
-      return `Bot: Hvala Vam! Vaš zahtjev je primljen.
+      const finalReply = `Bot: Hvala Vam! Vaš zahtjev je primljen.
 
 ${lines.join("\n")}
 
 Naš majstor će Vas kontaktirati u najkraćem roku!`;
+
+      // Non-blocking technician notification — self-catches all errors so a
+      // failed/skipped email never affects the user-facing reply.
+      sendSummaryEmail(session);
+
+      return finalReply;
     }
 
     // DEVICES summary (v2). installType is only collected for built-in
@@ -2322,7 +2466,7 @@ Naš majstor će Vas kontaktirati u najkraćem roku!`;
     const deviceInstallLine = session.installType
       ? `\nTip uređaja: ${session.installType}`
       : "";
-    return `Bot: Hvala Vam! Vaš zahtjev je primljen.
+    const finalReply = `Bot: Hvala Vam! Vaš zahtjev je primljen.
 
 --- REZIME ---
 Uređaj: ${session.deviceType || session.service}
@@ -2337,6 +2481,12 @@ Ime: ${session.name || "—"}
 ----------------
 
 Naš serviser će Vas kontaktirati u najkraćem roku!`;
+
+    // Non-blocking technician notification — self-catches all errors so a
+    // failed/skipped email never affects the user-facing reply.
+    sendSummaryEmail(session);
+
+    return finalReply;
   } else if (session.state === "END") {
     // Post-completion handler — never leak internal state names to the user.
     const lower = normalizeText(tekst);
@@ -2662,3 +2812,7 @@ app.get("/reset", (req, res) => {
 });
 
 module.exports = app;
+// Exposed for isolated unit testing (Task [5]) — does not affect server.js,
+// which only consumes the Express app instance.
+module.exports.buildTechnicianEmail = buildTechnicianEmail;
+module.exports.createSession = createSession;

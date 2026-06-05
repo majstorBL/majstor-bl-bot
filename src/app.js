@@ -1972,9 +1972,7 @@ function buildTechnicianEmail(session) {
   } else if (branch === "INSTALLATIONS") {
     lines.push(
       `Vrsta radova: ${
-        typeLabels[session.installationType] ||
-        session.installationType ||
-        dash
+        typeLabels[session.installationType] || session.installationType || dash
       }`,
     );
     lines.push(`Predmet/intervencija: ${session.itemName || dash}`);

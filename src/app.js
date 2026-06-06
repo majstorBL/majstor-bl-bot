@@ -1,8 +1,5 @@
 const express = require("express");
 const https = require("https"); // built-in Node.js module — no install needed
-const dns = require("dns"); // [5c] force IPv4-first DNS so Gmail SMTP works on Render
-dns.setDefaultResultOrder("ipv4first"); // avoids IPv6 ENETUNREACH on Render
-const nodemailer = require("nodemailer"); // technician email notification (Task [5])
 const app = express();
 
 // Multi-user session store — each user gets their own session object
@@ -2017,38 +2014,41 @@ function buildTechnicianEmail(session) {
 async function sendSummaryEmail(session) {
   if (!session || session.emailSent) return;
 
-  const { EMAIL_USER, EMAIL_PASS, EMAIL_TO } = process.env;
-  if (!EMAIL_USER || !EMAIL_PASS || !EMAIL_TO) {
+  const { BREVO_API_KEY, EMAIL_FROM, EMAIL_TO, EMAIL_FROM_NAME } = process.env;
+  if (!BREVO_API_KEY || !EMAIL_FROM || !EMAIL_TO) {
     console.warn(
-      "Email notification skipped: missing EMAIL_USER, EMAIL_PASS or EMAIL_TO.",
+      "Email notification skipped: missing BREVO_API_KEY, EMAIL_FROM or EMAIL_TO.",
     );
     return;
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 587,
-      secure: false,
-      requireTLS: true,
-      family: 4,
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 20000,
-      auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS,
-      },
-    });
-
     const email = buildTechnicianEmail(session);
 
-    await transporter.sendMail({
-      from: EMAIL_USER,
-      to: EMAIL_TO,
+    const payload = {
+      sender: {
+        email: EMAIL_FROM,
+        name: EMAIL_FROM_NAME || "Majstor Banja Luka",
+      },
+      to: [{ email: EMAIL_TO }],
       subject: email.subject,
-      text: email.text,
+      textContent: email.text,
+    };
+
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "api-key": BREVO_API_KEY,
+      },
+      body: JSON.stringify(payload),
     });
+
+    if (!response.ok) {
+      const responseBody = await response.text();
+      throw new Error(`Brevo API error ${response.status}: ${responseBody}`);
+    }
 
     session.emailSent = true;
     console.log("Technician email notification sent.");

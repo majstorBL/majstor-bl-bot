@@ -1,7 +1,8 @@
 ================================================================
 MAJSTOR BANJALUKA — CHATBOT PROJECT
 Master Context Document for Claude Code
-Last updated: May 2026 (Task [4b-UX] DEVICES v2 ✅ DONE)
+Last updated: June 2026 (Task [6g] Android Messenger Quick Reply "Dalje" fix ✅ DONE)
+              (Task [5] Email Notification ✅ DONE / PRODUCTION VERIFIED)
 ================================================================
 This file is named CLAUDE.md — Claude Code reads it automatically
 at the start of every session. No need to reference it manually.
@@ -28,8 +29,8 @@ Services:
 - Furniture assembly/disassembly
 - Electrical installations (outlets, switches, lighting, TV mounts)
 - Plumbing — external components only
-  (fixtures, faucets, valves, hoses)
-- Device installation (boilers, electric stoves)
+  (fixtures, faucets, valves, hoses, vodokotlići)
+- Device installation (boilers, electric stoves, cooktops, range hoods)
 
 Target platform: Facebook Business Page (Messenger)
 
@@ -43,7 +44,7 @@ Build a Facebook Messenger chatbot that acts as a "smart receptionist":
 - Identifies the type of request (repair vs. installation)
 - Guides the client through a structured conversation
 - Collects all relevant data
-- Delivers a clean summary to the technician
+- Delivers a clean summary to the technician/majstor
 - Informs the client they will be contacted
 
 The bot does NOT repair, advise, price, or schedule.
@@ -54,6 +55,7 @@ SECTION 3 — SYSTEM ARCHITECTURE
 
 Client → FB Messenger → Webhook (POST /webhook)
 → processMessage() → sendMessengerReply() → Client
+→ sendSummaryEmail() → Brevo HTTP API → Gmail (technician)
 
 AI layer (future):
 processMessage() → AI Adapter → [Gemini / Claude / GPT] → reply
@@ -63,457 +65,361 @@ Note: AI provider is interchangeable via adapter pattern.
       Production phase: to be decided based on performance and cost.
 
 Key principle: "Transport First, Intelligence Second"
-→ Transport layer is now complete and verified ✅
+→ Transport layer complete and verified ✅
 → Image/attachment handling complete and tested on live Messenger ✅
 → DEVICES v2 UX Refactor complete and tested ✅
-→ INSTALLATIONS v2 UX Refactor is next (Task 4c-UX)
-→ AI intelligence layer is after UX Refactor
+→ DEVICES flow polish + keyword matrix fix complete ✅
+→ INSTALLATIONS v2 UX Refactor complete and tested ✅
+→ INSTALLATIONS keyword matrix final fix complete, 79/79 PASS ✅
+→ Technician email notification live via Brevo HTTP API ✅
+→ Meta App Review preparation is NEXT (Task [6])
 
 Current file structure (MajstorBL_GPT — active project):
 
 src/app.js       — Express app, all route logic, session state,
-                   processMessage(), sendMessengerReply()
+                   processMessage(), sendMessengerReply(),
+                   buildTechnicianEmail(), sendSummaryEmail()
 src/server.js    — Only starts the server, imports app from app.js
-package.json     — Project config
+package.json     — Project config (no nodemailer — uses native fetch)
 CLAUDE.md        — This file (auto-read by Claude Code)
+
+Test files (root of project — keep in repo, never delete):
+test-email-builder.js                  — email builder unit tests, 14 tests
+test-installations-keywords.js         — original regression suite, 39 tests
+test-installations-keywords-v2.js      — Messenger bug regression suite, 14 tests
+test-installations-keywords-master.js  — master keyword matrix suite, 79 tests
+test-devices-flow-polish.js            — DEVICES polish regression suite, 28 tests
+test-continue-answer-quickreply.js     — Quick Reply "Dalje" regression suite, 27 tests
 
 Entry point: src/server.js  (package.json → "start": "node src/server.js")
 Deployed at: Render.com (auto-deploy from GitHub)
+Live commit:  55f9a73 — "Replace Gmail SMTP with Brevo HTTP Email API"
+
+Git log (recent):
+  55f9a73 Replace Gmail SMTP with Brevo HTTP Email API   ← HEAD
+  90a5cc1 Polish DEVICES flow and add regression suite
+  931284b INSTALLATIONS v2 final keyword matrix fix
 
 ================================================================
-SECTION 4 — CURRENT CODE STATE (app.js)
+SECTION 4 — CURRENT CODE STATE (src/app.js)
 ================================================================
 
 CURRENT IMPLEMENTATION STATUS:
 
-- Multi-user sessions (sessions object, keyed by userId) ✅
-- normalizeText() — trims, lowercases, handles null/undefined ✅
-- Empty input blocked (except START state) ✅
+CORE / SHARED:
+- Multi-user sessions (sessions{} keyed by userId) ✅
+- normalizeText() — trims, lowercases, null-safe ✅
+- isContinueAnswer(text) — Android Messenger Quick Reply continue/skip
+  detector ✅ (Task [6g]). Normalizes input, strips emoji/symbol/
+  punctuation noise (keeps letters/numbers/spaces, incl. č/ć/đ/š/ž),
+  returns true only when the cleaned text equals "dalje". Accepts plain
+  "Dalje" AND decorated forms like "➡️ Dalje" that the Android Messenger
+  app sends back as the Quick Reply title. Used at ASK_PHOTOS,
+  ASK_LOCATION and ASK_NAME skip points. Exported via module.exports
+  for the regression unit test. No Unicode property escapes — safe on
+  current Node runtime.
+- Empty input blocked (except START and END states) ✅
 - createSession() — initializes fresh session per user ✅
+  Now includes summaryNotes: [] and emailSent: false (added Task [5]).
 - classifyBranch() — keyword-based branch detection ✅
-  KNOWN TECHNICAL DEBT: generic keywords "aparat" and "uređaj" may cause
-  false DEVICES classification. Low priority — fix in future cleanup.
-- extractDeviceType() — auto-detects device from first message ✅
-  BUG FIXED in [4b-UX]: dishwasher entry now precedes washing machine.
-  "mašina za suđe" / "sudomašina" now correctly resolves to "sudomašina".
-- isFurniture() — controls conditional ASK_DIMENSIONS state ✅
-- handleAskService() — extracted shared logic for START + ASK_SERVICE ✅
-  Fixes bug where first user message was ignored.
-  Detects greeting-only messages and contact-intent phrases separately.
-- getDeviceInstrumental() — BHS grammatical forms for device names ✅
-  e.g. "bojler" → "bojlerom", "frižider" → "frižiderom"
-- getModelHint() — device-specific label location hints ✅
-  e.g. veš mašina → "unutar vrata bubnja"
-- branch field in session (DEVICES / INSTALLATIONS / UNKNOWN) ✅
-- Branch A (DEVICES) — DEVICES v2 flow complete ✅
-  START fix / greeting detection / contact intent / dishwasher fix /
-  model unknown handling / grammar helper / model hint / contact block
-- Branch B (INSTALLATIONS) — pre-refactor flow, untouched ← [4c-UX]
-- "dalje" is case-insensitive and trimmed (via normalizeText) ✅
-- Max 2 photos logic exists in text flow — real Messenger attachments
-  handled via Task [4a] ✅
-- processMessage() — core logic extracted as standalone function ✅
-- sendMessengerReply() — sends messages via Facebook Send API ✅
-- Webhook foundation (GET/POST /webhook) ✅
-- Webhook verified by Meta ✅
-- Messenger integration live and functional ✅
-- Image/attachment handling implemented and tested on live Messenger ✅
-  - image attachments accepted, URL stored in session.photos[]
-  - non-image attachments (video, audio, file) rejected with message
-  - maximum 2 photos stored per session, excess ignored
-  - ASK_PHOTOS state no longer treats text input as a photo
-  - debug logging active with [4a] prefix
-  - res.status(200) moved to end of forEach — fixes delayed reply issue
-- Code pushed to GitHub ✅
-- Deployed to Render (public HTTPS endpoint) ✅
-- UX Refactor INSTALLATIONS v2 NOT yet implemented ← Task [4c-UX]
-- No AI layer yet ← Task [5]
-
-What app.js currently does:
-
-Core functions:
-- normalizeText(text) — safe input normalization used everywhere
-- createSession() — initializes fresh session per user
-- classifyBranch(text) — returns "DEVICES", "INSTALLATIONS", "UNKNOWN"
-- extractDeviceType(text) — returns canonical device name or null.
-  Dishwasher entry precedes washing machine entry (bug fix [4b-UX]).
-  "aparat" and "uređaj" intentionally excluded — too generic.
-- isFurniture(text) — returns true if installationType is furniture
-- handleAskService(session, tekst) — shared routing logic for START
-  and ASK_SERVICE states. Detects greeting-only and contact-intent
-  messages. Routes to DEVICES or INSTALLATIONS branch.
-- getDeviceInstrumental(deviceType) — returns BHS instrumental form
-  of device name for natural language: "bojler" → "bojlerom"
-- getModelHint(deviceType) — returns device-specific hint about where
-  to find the model label on the appliance
-- processMessage(userId, tekst) — core state machine logic.
+  Contains two DEVICES priority guards:
+  (a) appliance phrase + fault phrase (osigurač case) — runs FIRST
+  (b) [4d-UX] device fault guard (ne radi, ne pali, etc.) — runs AFTER
+      installation-intent pre-check, so explicit install verbs still win.
+  KNOWN TECHNICAL DEBT: generic keywords "aparat" and "uređaj" may
+  cause false DEVICES classification. Low priority — future cleanup.
+- handleAskService() — shared START + ASK_SERVICE routing ✅
+  Detects greeting-only messages and contact-intent phrases.
+  Runs out-of-scope checks BEFORE classifyBranch().
+- processMessage() — core state machine, pure function ✅
   Used by both GET /next (testing) and POST /webhook (Messenger).
-  Returns reply string with "Bot: " prefix.
-- sendMessengerReply(recipientId, messageText) — sends reply via
-  Facebook Graph API v18.0. Strips "Bot: " prefix before sending.
-  Uses PAGE_ACCESS_TOKEN from environment variables.
+- sendMessengerReply() — sends text via Facebook Send API ✅
+- sendMessengerQuickReply() — sends Quick Reply buttons ✅
+  Used ONLY on ASK_PHOTOS step in both branches.
+- Webhook GET /webhook — Meta verification ✅
+- Webhook POST /webhook — Messenger events, attachment handling ✅
+  res.status(200) sent AFTER forEach (prevents proxy close bug).
+  Image attachments stored in session.photos[] (max 2).
+  Non-image attachments (video, audio, file) rejected with message.
+  Quick Reply payload treated as plain text input.
 
-Endpoints:
-- GET /webhook — Meta verification (hub.challenge response)
-  VERIFY_TOKEN from process.env.META_VERIFY_TOKEN
-- POST /webhook — receives Messenger events, handles image attachments
-  and text messages separately, sends replies via sendMessengerReply().
-  Returns 200 AFTER all processing (not immediately) to prevent
-  Render proxy from closing connection before replies are sent.
-- GET /next?userId=...&tekst=... — browser testing endpoint
-- GET /reset?userId=... — resets session for specific userId
+EMAIL NOTIFICATION (Task [5]) ✅ DONE / PRODUCTION VERIFIED:
+- buildTechnicianEmail(session) — pure function, returns {subject, text} ✅
+  Exported via module.exports for isolated unit testing.
+  Builds subject: "[NOVI ZAHTJEV] BRANCH — detail — location"
+  Builds body with three sections:
+    --- PODACI O ZAHTJEVU --- (branch-specific fields)
+    --- KONTAKT ---           (phone, location, name)
+    --- FOTOGRAFIJE ---       (count + URL links)
+  Guard for old sessions: Array.isArray(session.summaryNotes) check.
+  Does NOT touch network or session state — safe to call any time.
+- sendSummaryEmail(session) — async, NON-BLOCKING, SAFE, IDEMPOTENT ✅
+  Called without await after finalReply is assembled — never delays UX.
+  Skips silently if BREVO_API_KEY / EMAIL_FROM / EMAIL_TO are missing.
+  Uses Node built-in fetch() — no nodemailer dependency.
+  POSTs to https://api.brevo.com/v3/smtp/email (HTTPS port 443).
+  Sets session.emailSent = true ONLY after response.ok.
+  Logs success: "Technician email notification sent."
+  Logs failure: "Technician email notification failed: <error>"
+  Never throws — all errors caught locally, never surface to user.
+- Email transport decision: Brevo HTTP API (not Gmail SMTP) ✅
+  SMTP on Render free tier failed with IPv6 ENETUNREACH on ports 465/587.
+  DNS ipv4first workaround still resulted in connection timeout.
+  Brevo HTTP API uses HTTPS 443 — works reliably on Render.
+  Architecture is flexible: transport is isolated in sendSummaryEmail()
+  and can be swapped (SMTP, other API) without touching any flow logic.
 
-Current Branch A (DEVICES) state machine — POST-REFACTOR ✅ DONE:
+DEVICES BRANCH (Branch A) — v2 + [4d-UX] polish ✅ DONE / STABLE:
+- extractDeviceType() — auto-detects device from first message ✅
+  Ordering: sudomašina → sušilica → veš mašina (prevents ordering bugs).
+  Covers: frižder/frizder, škrinja/skrinja, sušilica/sušilica veša,
+  printer/štampač, šparet, loptop, indukciona ploča, električna ploča.
+- shouldAskDeviceInstallType(deviceType) ✅  [4d-UX]
+  Returns true ONLY for: sudomašina, veš mašina, sušilica, frižider,
+  zamrzivač, šporet, električna ploča, indukciona ploča, bojler.
+  For računar, laptop, monitor, TV, printer — returns false → skip to photos.
+- devicesPhotoPrompt() ✅  [4d-UX]
+  Aligned with INSTALLATIONS: max 2 photos, video not supported, Dalje.
+- getDeviceInstrumental() — BHS instrumental grammatical forms ✅
+- getModelHint() — device-specific label location hints ✅
+- Model "nepoznat" fallback when user doesn't know model ✅
+- phoneRefusedOnce flag — one retry before session closes ✅
+- Room/location question REMOVED from DEVICES flow ✅  [4d-UX]
+- DEVICES address prompt: "adresa ili naselje gdje bi serviser trebao doći" ✅
+- DEVICES summary: installType shown only when present (no null display) ✅
+
+DEVICES v2 state machine (STABLE — do NOT change):
   START → ASK_SERVICE (via handleAskService)
-  → (auto-detect OR ASK_DEVICE_TYPE)
-  → ASK_BRAND → ASK_MODEL → ASK_DESCRIPTION → ASK_FAULT_PATTERN
-  → ASK_INSTALL_TYPE → ASK_PHOTOS
-  → ASK_CONFIRMATION → ASK_PHONE → ASK_LOCATION → ASK_NAME → END
+       → (auto-detect device OR ASK_DEVICE_TYPE)
+       → ASK_BRAND → ASK_MODEL → ASK_DESCRIPTION
+       → ASK_FAULT_PATTERN
+       → (ASK_INSTALL_TYPE only if shouldAskDeviceInstallType() = true)
+       → ASK_PHOTOS
+       → ASK_CONFIRMATION → ASK_PHONE → ASK_LOCATION
+       → ASK_NAME → END + summary + sendSummaryEmail()
 
-Current Branch B (INSTALLATIONS) state machine — PRE-REFACTOR:
-  START → ASK_SERVICE → ASK_INSTALLATION_TYPE → ASK_ITEM_NAME
-  → ASK_ITEM_CONDITION → ASK_WALL_TYPE → ASK_ACCESS → ASK_WORK_READY
-  → (ASK_DIMENSIONS if furniture) → ASK_LOCATION → ASK_FLOOR
-  → ASK_PARKING → ASK_PHOTOS → ASK_CONTACT → CONFIRM_REQUEST → END
+INSTALLATIONS BRANCH (Branch B) — v2 ✅ DONE / STABLE:
 
-TARGET Branch B (INSTALLATIONS) state machine — POST-REFACTOR (Task 4c-UX):
-  START → ASK_SERVICE → ASK_INSTALLATION_TYPE → ASK_ITEM_NAME
-  → ASK_ITEM_CONDITION_AND_READY
-  → (ASK_MOUNTING_MODE if unknown)
-  → (ASK_WALL_TYPE if mountingMode = wall/ceiling)
-  → (ASK_ACCESS if B2 or B3 or B4)
-  → ASK_WORK_READY
-  → (ASK_BRAND + ASK_MODEL if B4 and itemReady = true)
-  → (ASK_DIMENSIONS if B1 or wall-mounted items)
-  → ASK_FLOOR → ASK_PARKING → ASK_PHOTOS
-  → ASK_CONFIRMATION → ASK_PHONE → ASK_LOCATION → ASK_NAME → END
+Helper functions (all implemented and tested):
+- extractInstallationType() — detects B1/B2/B3/B4 sub-category ✅
+- extractInstallationItem() — detects canonical item name ✅
+- detectMountingMode() — wall/ceiling/freestanding/unknown ✅
+- detectOutOfScopePlumbing() — nuanced, NOT a blunt trigger ✅
+  Local endpoint context guard preserves B3 for "začepljen sifon ispod lavaboa".
+- detectOutOfScopeElectrical() — nuanced, NOT a blunt trigger ✅
+  Local endpoint faults stay B2; in-wall rewiring → out-of-scope.
+- detectDemolition() — broad backwards-compatible detector ✅
+- detectDemolitionRequested() — nuanced demolition detector ✅
+  Regex-based BHS word-order handling. Guards against already-done false positives.
+- detectAlreadyRemovedOrReady() — already-done protection ✅
+- addBhsNote(session, bhsText) — clean BHS-only summary notes ✅
+  Deduplicates. NEVER store English debug strings in summaryNotes.
+- sessionHasDemolitionRequestNote() — checks summaryNotes[] ✅
+- isNegativeWorkReadyAnswer() — triggers ASK_DEMOLITION_FOLLOWUP ✅
+- shouldAskStandaloneOrBuiltIn() — B4 device type question ✅
+- buildAccessQuestionForInstallations() — item-specific wording ✅
+- continueInstallationsFlow(session, fromState) — central dispatcher ✅
+- nextAfterRecognitionInstallations(session) — initial router ✅
+  Skips ASK_WORK_READY if demolition already noted.
+- installationsPhotoPrompt() — standard photo step message ✅
+- ASK_HAS_PART intentionally DISABLED in active v2 flow ✅
 
-Known technical debt (post [4b-UX]):
-  - Dead code: old DEVICES CONFIRM_REQUEST summary block (lines ~582-598)
-    never reached in v2 — clean up during [4c-UX]
-  - INSTALLATIONS flow still has "zabilježeno" pattern — fix in [4c-UX]
-  - INSTALLATIONS contact field still single string — fix in [4c-UX]
-  - notes[] not yet in session model — add in [4c-UX]
-  - Generic classifyBranch keywords "aparat"/"uređaj" — low priority cleanup
-  - handleAskService UNKNOWN response still has old example list — minor
+INSTALLATIONS v2 state machine (STABLE — do NOT change):
+  START → ASK_SERVICE (via handleAskService)
+       → (auto-detect type+item OR ASK_INSTALLATION_TYPE)
+       → (ASK_ITEM_NAME if B1/B4 and item unknown)
+
+  B1 path:
+       → (skip ASK_WORK_READY if demolition already noted)
+       → ASK_WORK_READY → (ASK_DEMOLITION_FOLLOWUP if "ne")
+       → (ASK_WALL_TYPE if mountingMode=wall/ceiling)
+       → ASK_DIMENSIONS → ASK_PHOTOS
+
+  B2/B3 path:
+       → ASK_PROBLEM_DESCRIPTION → ASK_ACCESS → ASK_PHOTOS
+
+  B4 path:
+       → (skip ASK_WORK_READY if demolition already noted)
+       → ASK_WORK_READY → (ASK_DEMOLITION_FOLLOWUP if "ne")
+       → (ASK_STANDALONE_OR_BUILTIN if relevant device)
+       → ASK_ACCESS
+       → (ASK_WALL_TYPE if mountingMode=wall/ceiling)
+       → ASK_BRAND → ASK_MODEL
+       → (ASK_DIMENSIONS if wall-mounted)
+       → ASK_PHOTOS
+
+  All paths converge:
+       → ASK_CONFIRMATION → ASK_PHONE → ASK_LOCATION
+       → ASK_NAME → END + summary + sendSummaryEmail()
+
+SESSION MODEL (current createSession()):
+  state, branch, service
+  // DEVICES-only
+  deviceType, faultPattern, installType
+  // DEVICES v2 contact block
+  phone (mandatory), name (optional), phoneRefusedOnce
+  // INSTALLATIONS-only
+  installationType (B1/B2/B3/B4), itemName, itemCondition
+  itemReady (true/false/null), mountingMode
+  wallType, accessInfo, workReady, dimensions, floorInfo, parkingInfo
+  // Shared
+  brand, model, description, location, photos[], notes[], contact
+  summaryNotes[]   ← clean BHS notes, initialized in createSession() ✅
+  emailSent: false ← prevents duplicate email sends, set in createSession() ✅
+  // contact: legacy field — retained for compatibility, unused in v2
 
 ================================================================
-SECTION 4a — API DESIGN
+SECTION 4a — QA / REGRESSION SUITES
 ================================================================
 
-API (current):
+All five test files live in the project root (not in src/).
+Run with server active in one terminal, test in second terminal.
+Exception: test-email-builder.js is a unit test — no server needed.
 
-  GET /webhook                    — Meta webhook verification endpoint
-  POST /webhook                   — incoming Messenger events + reply
-  GET /next?userId=...&tekst=...  — browser testing endpoint
-  GET /reset?userId=...           — resets session for specific userId
+test-email-builder.js                  — 14 tests  — 14/14 PASS ✅
+test-installations-keywords.js         — 39 tests  — 39/39 PASS ✅
+test-installations-keywords-v2.js      — 14 tests  — 14/14 PASS ✅
+test-installations-keywords-master.js  — 79 tests  — 79/79 PASS ✅
+test-devices-flow-polish.js            — 28 tests  — 28/28 PASS ✅
+test-continue-answer-quickreply.js     — 27 tests  — 27/27 PASS ✅
+TOTAL:                                  201 tests  — 201/201 PASS ✅
 
-Note:
-GET /next and GET /reset are temporary browser testing endpoints.
-Core message flow runs through POST /webhook in production.
+MANDATORY — run ALL before any commit:
+  node --check src/app.js
+  node test-email-builder.js
+  node test-installations-keywords.js
+  node test-installations-keywords-v2.js
+  node test-installations-keywords-master.js
+  node test-devices-flow-polish.js
+  node test-continue-answer-quickreply.js
+
+Note: test-email-builder.js tests buildTechnicianEmail() in isolation.
+No server needed — it is a pure function unit test.
+test-continue-answer-quickreply.js has two parts: Part A unit-tests
+isContinueAnswer() with NO server; Part B runs HTTP flow tests that
+require the server. Run it with the server active to exercise both parts.
+All other test files require the server running in a second terminal.
+
+Do NOT delete any test files. They are the safety net — regressions
+will be invisible without them.
 
 ================================================================
-SECTION 4b — SESSION MODEL
+SECTION 4b — API DESIGN
 ================================================================
 
-TARGET session model (after Task 4c-UX refactor):
+GET  /webhook                      — Meta webhook verification
+POST /webhook                      — Messenger events + reply
+GET  /next?userId=...&tekst=...    — browser testing endpoint
+GET  /reset?userId=...             — resets session for specific user
 
-  const sessions = {}
+GET /next and GET /reset are temporary testing endpoints.
+Core production flow runs through POST /webhook only.
 
-  sessions[userId] = {
-    state:            "START",
-    branch:           null,    // "DEVICES" | "INSTALLATIONS" | "UNKNOWN"
-    service:          null,
-
-    // DEVICES-only fields
-    deviceType:       null,
-    faultPattern:     null,
-    installType:      null,
-
-    // DEVICES v2 contact fields (implemented in [4b-UX])
-    phone:            null,    // MANDATORY — session closes if refused twice
-    phoneRefusedOnce: false,   // tracks first refusal to allow one retry
-    name:             null,    // optional
-
-    // INSTALLATIONS-only fields (to be refactored in [4c-UX])
-    installationType: null,    // "B1" | "B2" | "B3" | "B4"
-    itemName:         null,
-    itemCondition:    null,    // "novo" | "polovno"
-    itemReady:        null,    // true | false — was item already purchased?
-    mountingMode:     null,    // "wall" | "ceiling" | "freestanding" | "unknown"
-    wallType:         null,
-    accessInfo:       null,
-    workReady:        null,
-    dimensions:       null,
-    floorInfo:        null,
-    parkingInfo:      null,
-
-    // Shared fields
-    brand:            null,
-    model:            null,    // "nepoznat" if user doesn't know
-    description:      null,
-    location:         null,    // optional for DEVICES — mandatory area for INSTALLATIONS
-    photos:           [],
-    notes:            [],      // fallback info, additional remarks, future AI use
-    contact:          null,    // legacy field — INSTALLATIONS pre-refactor only
-  }
+module.exports exposes three additional symbols for testing:
+  module.exports.buildTechnicianEmail  — pure function, safe to import
+  module.exports.createSession         — session factory, safe to import
+  module.exports.isContinueAnswer      — Quick Reply "Dalje" detector ([6g])
 
 ================================================================
 SECTION 5 — TOP-LEVEL ROUTING
 ================================================================
 
-On the first client message, the bot classifies the request:
+On the first client message, handleAskService() classifies:
 
 [BRANCH A] DEVICES — repair and maintenance of electrical appliances
-[BRANCH B] INSTALLATIONS — assembly, electrical, plumbing, device installation
+[BRANCH B] INSTALLATIONS — assembly, electrical, plumbing, device install
+[OUT-OF-SCOPE] — polite decline, session ends
 
-GREETING DETECTION (new in v2):
-- If first message is a greeting only (zdravo, dobar dan, hej, etc.)
-  → Bot replies: "Dobar dan! Kako Vam možemo pomoći?"
-  → Waits for next message to classify branch
+ROUTING ORDER in handleAskService():
+  1. Greeting / contact-intent check → ask "Kako Vam možemo pomoći?"
+  2. detectOutOfScopePlumbing() → decline + END
+  3. detectOutOfScopeElectrical() → decline + END
+  4. classifyBranch() → DEVICES / INSTALLATIONS / UNKNOWN
+  5. DEVICES: extractDeviceType() → route to flow
+  6. INSTALLATIONS: detectDemolitionRequested() → addBhsNote()
+                    extractInstallationType() → set installationType
+                    extractInstallationItem() → set itemName + mountingMode
+                    → nextAfterRecognitionInstallations()
 
-- If first message already describes the need
-  → Bot skips greeting, goes directly to branch-specific flow
-  → Reply: "Dobro, vidim da imate problem sa [uređaj]." (DEVICES)
-         or "Dobro, trebate [intervencija]." (INSTALLATIONS)
-  → Then: "Da bismo Vas što prije spojili sa serviserom/majstorom,
-           trebam još nekoliko informacija."
-
-================================================================
-SECTION 6 — BRANCH A: DEVICES (Repair & Maintenance)
-================================================================
-
-Scope:
-- White goods (washing machines, dishwashers, refrigerators, boilers)
-- Household electronics
-- Computers and peripherals
-- Small household appliances
-
-TERMINOLOGY: always use "serviser" or "tehničar" — never "majstor"
-
-DATA COLLECTION FLOW (in order):
-
-Step 1 — Device Identification
-  1a. Device type — auto-detected from first message if possible
-      (extractDeviceType() — skips ASK_DEVICE_TYPE if detected)
-  1b. Brand / Manufacturer
-      → "Koji je brend (proizvođač) uređaja?"
-  1c. Model — with DEVICE-SPECIFIC hint where to find the label:
-      - Veš mašina: "unutar vrata bubnja"
-      - Bojler:     "prednja ili bočna strana"
-      - Frižider:   "unutar frižidera, bočni zid"
-      - Laptop:     "naljepnica s donje strane"
-      - Generic:    "naljepnica uređaja ili račun o kupovini"
-
-Step 2 — Problem Diagnosis
-  2a. Fault description
-      → "Opišite problem — šta se tačno dešava sa uređajem?"
-  2b. Fault pattern
-      → "Da li se problem javlja stalno, ili povremeno?"
-
-Step 3 — Installation Type + Location
-  → "Da li je uređaj ugradbeni ili samostojeći, i u kojem dijelu
-     prostora se nalazi? (npr. kupatilo, kuhinja, ostava)"
-  NOTE: location/address is NOT asked here — moved to contact block
-
-Step 4 — Photos (optional, Quick Reply)
-  → "Ako želite, možete nam poslati fotografiju uređaja, mjesta kvara
-     ili naljepnice sa modelom (maksimalno 2 fotografije)."
-  Quick Reply buttons: [ 📷 Pošalji fotografiju ] [ ➡️ Dalje ]
-  NOTE: This is the ONLY step with Quick Reply buttons.
-
-Step 5 — Confirmation
-  → "Hvala na informacijama! Da li želite da Vas naš serviser direktno
-     kontaktira, radi dogovora termina posjete i popravke Vašeg uređaja?"
-  If YES → proceed to contact block
-  If NO  → thank client, close session
-
-Step 6 — Contact Block (phone → location → name)
-  → "Molimo Vas pošaljite broj telefona na koji Vas serviser može kontaktirati."
-     (mandatory — if refused, explain once, then close session)
-  → "Možete li poslati adresu ili lokaciju gdje se uređaj nalazi?
-     Ako ne želite tačnu adresu, napišite samo naselje ili dio grada." (optional)
-  → "Na koje ime da evidentiramo zahtjev? Ako ne želite, napišite Dalje." (optional)
-
-Step 7 — Summary + Close
-  📋 Uređaj / 🔧 Brend+Model / ❗ Problem / 🔄 Učestalost /
-  📍 Adresa / 📞 Telefon / 👤 Ime
-  "Naš serviser će Vas kontaktirati u najkraćem roku!"
+DEVICES priority guards in classifyBranch() (two guards, in order):
+  Guard 1: appliance phrase + fault phrase (e.g. "veš mašina izbacuje osigurač")
+    → forced DEVICES BEFORE installationIntent pre-check.
+  Guard 2: [4d-UX] device fault guard (device phrase + fault symptom)
+    → runs AFTER installationIntent pre-check so install verbs still win.
+  Pure electrical fault (no appliance) → INSTALLATIONS (B2).
 
 ================================================================
-SECTION 7 — BRANCH B: INSTALLATIONS & INTERVENTIONS
+SECTION 6 — BRANCH A: DEVICES
+================================================================
+
+Scope: white goods, boilers, electronics, computers, small appliances.
+TERMINOLOGY: always "serviser" or "tehničar" — NEVER "majstor".
+
+DATA COLLECTION (in order):
+  1. Device type — auto-detected or ASK_DEVICE_TYPE
+  2. Brand — ASK_BRAND
+  3. Model — ASK_MODEL (device-specific label hint, "nepoznat" fallback)
+  4. Fault description — ASK_DESCRIPTION
+  5. Fault pattern (constant/intermittent) — ASK_FAULT_PATTERN
+  6. Install type (built-in/freestanding) — ASK_INSTALL_TYPE
+     ONLY if shouldAskDeviceInstallType() returns true.
+  7. Photos (optional, Quick Reply, max 2) — ASK_PHOTOS
+  8. Confirmation — ASK_CONFIRMATION
+  9. Phone (mandatory, one retry) — ASK_PHONE
+  10. Address/neighborhood (optional) — ASK_LOCATION
+  11. Name (optional) — ASK_NAME → END + summary + email to technician
+
+================================================================
+SECTION 7 — BRANCH B: INSTALLATIONS
 ================================================================
 
 Sub-categories:
-  B1 — Furniture assembly/disassembly
-  B2 — Electrical installations (outlets, switches, lighting, TV mounts)
-  B3 — Plumbing — external components ONLY (fixtures, faucets, valves)
-  B4 — Device installation (boilers, electric stoves, washers)
+  B1 — Furniture assembly/disassembly, wall-mount items
+  B2 — Minor electrical: outlets, switches, lighting, fuses
+  B3 — Minor plumbing: faucets, siphons, valves, hoses, vodokotlići,
+       WC šolje, bidet, tuš kada, tuš baterija, tuš kabina, lavabo
+  B4 — Device installation: boiler, šporet, ploča, napa, mašina,
+       sudomašina, klima, zamrzivač, frižider
 
-TERMINOLOGY: always use "majstor" — never "serviser" or "tehničar"
+TERMINOLOGY: always "majstor" — NEVER "serviser" or "tehničar".
 
-KEY DISTINCTION FROM DEVICES:
-  DEVICES  → client says: ne radi / kvar / popravka / greška
-  INSTALLATIONS → client says: kupio sam / ugradnja / montaža / zamjena
+KEY DISTINCTION DEVICES vs INSTALLATIONS:
+  "ne radi / kvar / popravka / greška" → DEVICES
+  "ugradnja / montaža / zamjena / priključenje / kupio sam" → INSTALLATIONS
 
-DATA COLLECTION FLOW (in order):
-
-Step 1 — Service and Item Identification
-  1a. Installation sub-category (B1/B2/B3/B4) — auto-detected if possible
-  1b. Specific item (ormar, TV nosač, slavina, bojler, luster...)
-      → "Šta je tačno potrebno montirati, ugraditi ili zamijeniti?"
-      (skipped if already known from first message)
-
-Step 2 — Item Condition and Availability (COMBINED question)
-  → "Da li je predmet već kupljen i spreman za montažu, i da li je nov
-     ili polovan?"
-  Stores: itemCondition (novo/polovno) + itemReady (true/false)
-  IMPORTANT: if itemReady = false → skip Step 5 (brand/model)
-
-Step 3 — Wall / Surface Type (CONDITIONAL)
-  mountingMode detection by itemName:
-  - wall/ceiling: TV nosač, polica, ogledalo, luster, plafonjera,
-                  utičnica, prekidač, zidni bojler, tuš baterija,
-                  viseći element
-  - freestanding: ormar, komoda, krevet, sto, stolica, radni sto
-  - unknown:      bot asks → "Da li se predmet montira samostojeće,
-                  ili se fiksira na zid ili plafon?"
-
-  If mountingMode = wall/ceiling:
-    → "Kakav je zid ili površina? (beton, cigla, knauf/gips, drvo, ytong)"
-  If mountingMode = freestanding:
-    → SKIP this step
-
-Step 4 — Access to Installations (CONDITIONAL by sub-category)
-  B2 (electrical):
-    → "Da li je razvodna tabla (ormarić sa osiguračima) dostupna?"
-    → "Da li postoji pripremljen električni priključak na mjestu montaže?"
-  B3 (plumbing):
-    → "Da li je ventil za zatvaranje vode dostupan i ispravan?"
-    → "Da li postoje potrebni priključci za vodu ili odvod?"
-  B4 (device install) — by device type:
-    Bojler       → "Da li su dostupni priključci za vodu i struju?"
-    Šporet/ploča → "Da li postoji električni priključak za šporet/ploču?"
-    Mašina       → "Da li su dostupni priključci za vodu, odvod i struju?"
-  B1 (furniture):
-    → SKIP (unless installation requires drilling or electricity)
-
-Step 5 — Brand and Model (ONLY for B4, ONLY if itemReady = true)
-  → "Koji je brend (proizvođač) uređaja?"
-  → "Koji je model? Oznaku možete naći na naljepnici ili računu."
-  If itemReady = false → SKIP entirely
-
-Step 6 — Work Area Readiness
-  → "Da li je prostor pripremljen za rad? (stari predmet uklonjen,
-     površina slobodna, mjesto pristupačno)"
-
-Step 7 — Dimensions (CONDITIONAL)
-  B1 furniture:
-    → "Koje su dimenzije predmeta? (širina x visina x dubina)"
-  TV nosač / police / ogledala / viseći elementi:
-    → "Koje su dimenzije ili težina predmeta koji se montira?"
-  B2, B3:
-    → SKIP (unless large element involved)
-
-Step 8 — Floor and Elevator
-  → "Na kojem spratu se obavljaju radovi i da li postoji lift?"
-
-Step 9 — Parking
-  → "Da li je parking dostupan u blizini objekta?"
-
-Step 10 — Photos (optional, Quick Reply)
-  → "Ako želite, možete nam poslati fotografiju trenutnog stanja ili
-     mjesta montaže (maksimalno 2 fotografije)."
-  Quick Reply buttons: [ 📷 Pošalji fotografiju ] [ ➡️ Dalje ]
-
-Step 11 — Confirmation
-  → "Hvala na informacijama! Da li želite da Vas naš majstor kontaktira
-     radi dogovora oko dolaska na teren i izvođenja radova?"
-  If YES → proceed to contact block
-  If NO  → thank client, close session
-
-Step 12 — Contact Block (phone → location → name)
-  → "Molimo Vas pošaljite broj telefona na koji Vas majstor može kontaktirati."
-     (mandatory — if refused, explain once, then close session)
-  → "Možete li poslati adresu ili lokaciju gdje bi se radovi obavljali?
-     Ako ne želite tačnu adresu, napišite samo naselje ili dio grada." (optional)
-  → "Na koje ime da evidentiramo zahtjev? Ako ne želite, napišite Dalje." (optional)
-
-Step 13 — Summary + Close
-  🔧 Vrsta radova / 📦 Predmet / 🆕 Stanje+Kupljeno /
-  🧱 Zid / ⚡ Pristup / 🔩 Brend+Model / ✅ Prostor /
-  📐 Dimenzije / 🏢 Sprat+Lift / 🅿️ Parking /
-  📞 Telefon / 📍 Adresa / 👤 Ime / 📷 Fotografije
-  "Naš majstor će Vas kontaktirati u najkraćem roku!"
+After completing the contact block, both branches call sendSummaryEmail()
+non-blocking — the email goes out without the user ever waiting for it.
 
 ================================================================
 SECTION 8 — SESSION TERMINATION RULES
 ================================================================
 
-The bot ends the conversation EARLY (polite thank-you) when:
-
-T1. Request is outside scope of services.
+T1. Request outside scope of services.
 T2. Client seeks DIY repair advice.
-T3. Client refuses to provide phone number (after one retry with explanation).
-T4. Client requests a direct call at START:
-    → Thank them, say technician/majstor will call.
-    → Collect phone number only.
-    → Ask preferred app: Viber / FB Messenger / WhatsApp.
+T3. Client refuses phone number (after one retry with explanation).
+T4. Client requests direct call at START:
+    → Thank, say technician/majstor will call.
+    → Collect phone only + preferred app (Viber/Messenger/WhatsApp).
     → End session.
-T5. Client responds negatively to confirmation question (Step 5/11):
+T5. Client answers negatively to ASK_CONFIRMATION:
     → "U redu. Hvala Vam što ste nas kontaktirali."
-    → End session.
+    → End session. (No email sent — no contact data collected yet.)
 
 ================================================================
-SECTION 9 — STRICT OPERATIONAL RULES (ALWAYS APPLY)
+SECTION 9 — STRICT OPERATIONAL RULES
 ================================================================
 
 RULE 1 — NO DIY ADVICE
-  Never provide self-repair instructions or troubleshooting tips.
-
-RULE 2 — FREE TEXT ONLY (with one exception)
-  Never present clickable menus or predefined choices.
-  All input is free-form natural language.
-  EXCEPTION: Quick Reply buttons are used ONLY in the photo step
-  (both DEVICES and INSTALLATIONS). This is the only permitted use
-  of Quick Reply buttons in the entire bot. Documented as intentional
-  rule change from original spec.
-
-RULE 3 — PHOTOS ONLY, MAX 2
-  Never request or accept video recordings.
-  Only photos accepted, maximum 2 per session.
-  Bot responds to image attachments ✅ (implemented in Task [4a]).
-
-RULE 4 — NO PRICING
-  Never provide a full price list.
-  Standard response: "Cijena se određuje tek nakon izlaska na teren."
-  EXCEPTION: Approximate prices for specific standard services (TBD).
-
+RULE 2 — FREE TEXT ONLY (exception: Quick Reply "Dalje" on ASK_PHOTOS)
+RULE 3 — PHOTOS ONLY, MAX 2 — never request/accept video
+RULE 4 — NO PRICING — "Cijena se određuje tek nakon izlaska na teren."
 RULE 5 — NO APPOINTMENT SCHEDULING
-  Never confirm, book, or suggest a specific date/time for a visit.
-
 RULE 6 — ON-SITE SERVICE ONLY
-  "Naše usluge se obavljaju isključivo na adresi klijenta."
-  (applies to both DEVICES and INSTALLATIONS branches)
-
-RULE 7 — NO "ZABILJEŽENO" PATTERN
-  Bot must NEVER echo back user input with "zabilježeno" or repeat
-  the user's words literally. Confirmations must be natural and brief:
-  "Dobro.", "Razumijem.", "Hvala." — followed immediately by next question.
-
-RULE 8 — TERMINOLOGY
-  DEVICES branch     → always "serviser" or "tehničar"
-  INSTALLATIONS branch → always "majstor"
-  Never mix these terms between branches.
-
+RULE 7 — NO "ZABILJEŽENO" PATTERN — confirmations must be natural
+RULE 8 — TERMINOLOGY — DEVICES: serviser/tehničar; INSTALLATIONS: majstor
 RULE 9 — NO REPEATED QUESTIONS
-  Bot must never ask the same question twice unless the client gave
-  an unclear or invalid answer. If data was already provided in an
-  earlier message, that step must be skipped.
-
-RULE 10 — SKIP KNOWN DATA
-  If client provided enough information in the first message, the bot
-  must skip redundant questions and proceed to the next unknown field.
+RULE 10 — SKIP KNOWN DATA — use what the first message already gave
+RULE 11 — CLEAN SUMMARY NOTES — summaryNotes[] BHS only, no English labels
 
 ================================================================
 SECTION 10 — TECH STACK
@@ -521,144 +427,209 @@ SECTION 10 — TECH STACK
 
 Runtime:      Node.js
 Framework:    Express.js
-HTTP client:  Node.js built-in https module (for Send API calls)
+HTTP client:  Node.js built-in https (for Facebook Send API)
+              Node.js built-in fetch() (for Brevo Email API) ✅ Task [5]
 Dev tool:     Nodemon
 Version ctrl: Git (local) + GitHub (remote)
 Hosting:      Render.com (auto-deploy from GitHub) ✅ LIVE
-AI layer:     Provider-agnostic adapter pattern (not yet implemented)
-                Dev/test phase:  Google Gemini Flash (free tier)
-                Production phase: Gemini / Claude / GPT — TBD
-                Switching provider requires changes in ONE file only.
-Future DB:    Google Sheets for lead logging
+Email:        Brevo HTTP API (POST https://api.brevo.com/v3/smtp/email) ✅
+              nodemailer was tried and ABANDONED — SMTP unreliable on Render
+              (IPv6 ENETUNREACH on ports 465/587, timeout on STARTTLS/IPv4fix)
+AI layer:     Provider-agnostic adapter pattern (NOT YET implemented)
+                Dev/test:    Google Gemini Flash (free tier)
+                Production:  Gemini / Claude / GPT — TBD
+                Switch = change ONE file only.
+Future DB:    Google Sheets for lead logging (optional)
 Bot channel:  Facebook Messenger (Meta Messenger API) ✅ LIVE
 Language:     BHS for all client-facing communication
               English for code, docs, and AI prompts
 
-Environment variables (set in Render dashboard):
-  META_VERIFY_TOKEN   — webhook verification token ✅ configured
-  PAGE_ACCESS_TOKEN   — Meta page token for sending messages ✅ configured
+Environment variables (Render dashboard — current active set):
+  META_VERIFY_TOKEN   — webhook verification token ✅
+  PAGE_ACCESS_TOKEN   — Meta page token for Send API ✅
+  BREVO_API_KEY       — Brevo email API key ✅ (added Task [5])
+  EMAIL_FROM          — sender address (majstor.banjaluka@gmail.com) ✅
+  EMAIL_TO            — technician's address (majstor.banjaluka@gmail.com) ✅
+  EMAIL_FROM_NAME     — sender display name ("Majstor Banjaluka") ✅
+
+OBSOLETE env vars — delete from Render if still present:
+  EMAIL_USER          — was for Gmail SMTP, no longer used
+  EMAIL_PASS          — was for Gmail SMTP App Password, no longer used
 
 ================================================================
 SECTION 11 — DEVELOPMENT DECISIONS
 ================================================================
 
-1.  NO ngrok — webhook tested after deploy to Render, not locally
-2.  Render chosen over Railway — better uptime (critical for webhooks)
-3.  Deployment flow: Local → git commit → GitHub push → auto-deploy
-4.  Free-text only — with ONE exception: Quick Reply for photo step only
-5.  AI role: classify intent + extract data from natural language
-6.  "Transport First, Intelligence Second" — transport complete ✅
-7.  Port 3000 is active on Render
-8.  VERIFY_TOKEN and PAGE_ACCESS_TOKEN stored as env vars — never hardcoded
-9.  processMessage() extracted as pure function — used by both
-    GET /next (testing) and POST /webhook (production)
-10. sendMessengerReply() uses native https — no axios dependency needed
-11. res.status(200) moved to END of forEach loop (Task [4a] fix)
-    → Previously returned 200 immediately at top of handler
-    → Caused Render proxy to close connection before attachment replies sent
-    → Now returns 200 after all sendMessengerReply() calls are initiated
-12. Meta App Review required for public users:
-    → Functional bot + Privacy Policy URL + video demonstration
-    → Currently only Admin/Developer/Tester roles can interact
-13. contact field split into phone + location + name (v2 decision)
-    → phone: mandatory, session closes if refused after one retry
-    → location: optional, client can skip
-    → name: optional, client can skip
-14. mountingMode field introduced for INSTALLATIONS (v2 decision)
-    → auto-detected from itemName keywords
-    → determines whether wallType question is asked
-15. itemReady field introduced for INSTALLATIONS (v2 decision)
-    → if false, brand/model questions (B4) are skipped entirely
-16. Greeting detection introduced (v2 decision)
-    → Situacija A (greeting only) vs Situacija B (problem described)
-    → affects first bot response and routing speed
-17. notes[] array added to both session models (v2 decision)
-    → stores fallback info, additional remarks
-    → reserved for future AI layer use
-18. extractDeviceType() keyword ordering bug fixed in [4b-UX]
-    → Dishwasher entry now precedes washing machine entry
-    → "mašina za suđe" now correctly resolves to "sudomašina"
-19. Always Ctrl+S before git add/commit/push
-    → Claude Code edits files in VS Code but does not save automatically
-    → unsaved files produce stale deploys on Render
-20. handleAskService() extracted as shared function in [4b-UX]
-    → Handles both START and ASK_SERVICE states
-    → Fixes bug where first user message was ignored
-    → Detects greeting-only and contact-intent messages
-21. getDeviceInstrumental() added in [4b-UX]
-    → BHS grammatical instrumental forms for natural language
-    → "bojler" → "bojlerom", "veš mašina" → "veš mašinom"
-22. getModelHint() added in [4b-UX]
-    → Device-specific hints for where to find model label
-    → Different hint per device type
-23. model "nepoznat" fallback added in [4b-UX]
-    → If user says "ne znam", model is stored as "nepoznat"
-    → Prevents null in summary
-24. phoneRefusedOnce flag added in [4b-UX]
-    → Tracks first phone refusal
-    → Allows one retry before session closes politely
-25. Future cleanup — low priority:
-    → Remove generic classifyBranch keywords "aparat" and "uređaj"
-    → May cause false DEVICES classification for generic descriptions
+1.  NO ngrok — all webhook testing done after deploy to Render
+2.  Render over Railway — better uptime for webhook reliability
+3.  Deployment: local edit → Ctrl+S → git add → git commit → git push
+    → Render auto-deploy (always verify deploy is live before Messenger test)
+4.  ALWAYS Ctrl+S before git add/commit/push
+5.  Free-text only, ONE exception: Quick Reply on photo step
+6.  AI role: classify intent + extract data from natural language
+7.  "Transport First, Intelligence Second" — transport complete ✅
+8.  All secrets in env vars — never hardcoded
+9.  processMessage() is a pure function — used by /next and /webhook
+10. sendMessengerReply() uses native https — no axios dependency
+11. res.status(200) sent AFTER forEach in POST /webhook handler
+12. Meta App Review required for public users
+13. Phone → location → name in contact block (all optional except phone)
+14. mountingMode drives conditional ASK_WALL_TYPE
+15. itemReady field (B4): if false → skip ASK_BRAND/MODEL
+16. Greeting detection in handleAskService()
+17. summaryNotes[] clean BHS notes; notes[] internal debug only
+18. extractDeviceType() ordering: sudomašina → sušilica → veš mašina
+19. handleAskService() extracted for shared START + ASK_SERVICE logic
+20. getDeviceInstrumental() — BHS grammatical forms
+21. getModelHint() — device-specific label hints
+22. model "nepoznat" fallback
+23. phoneRefusedOnce flag — one retry
+24. DEVICES priority guard 1 — appliance + osigurač fault
+25. Out-of-scope detectors BEFORE classifyBranch()
+26. detectDemolitionRequested() — nuanced, regex BHS word-order
+27. detectAlreadyRemovedOrReady() — false demolition tag protection
+28. addBhsNote() + summaryNotes[] — clean BHS architecture
+29. nextAfterRecognitionInstallations() skips ASK_WORK_READY when noted
+30. continueInstallationsFlow() — single INSTALLATIONS dispatcher
+31. ASK_HAS_PART disabled in v2 (UX friction, state kept for v3)
+32. TV nosač = B1, not B2
+33. "kada" not in keywords — BHS false positive ("when")
+34. "pipa" = B3 keyword (colloquial BiH/RS for česma)
+35. Master regression suite before any keyword commit
+36. shouldAskDeviceInstallType() — selective built-in/freestanding question
+37. devicesPhotoPrompt() — aligned DEVICES photo prompt
+38. DEVICES fault guard 2 — device phrase + fault phrase → DEVICES
+39. Room question removed from DEVICES flow
+40. DEVICES summary: no null installType, label "Tip uređaja"
+41. EMAIL BEFORE AI LAYER — strategic decision: bot must deliver leads
+    before adding AI complexity. Confirmed and executed as Task [5].
+42. summaryNotes[] and emailSent initialized in createSession() ✅ Task [5]
+43. Email transport = Brevo HTTP API, not Gmail SMTP ✅ Task [5]
+    Gmail SMTP failed on Render (IPv6 ENETUNREACH ports 465/587).
+    DNS ipv4first workaround still timed out.
+    Brevo HTTP API over HTTPS 443 works reliably on Render.
+    Transport is isolated in sendSummaryEmail() — can be swapped later.
+44. sendSummaryEmail() is non-blocking (no await at call site) ✅ Task [5]
+    Fire-and-forget: user gets Messenger reply immediately regardless.
+45. buildTechnicianEmail() is a pure function exported for unit testing ✅
+    module.exports.buildTechnicianEmail allows test-email-builder.js to
+    import and test it in isolation without starting the server.
+46. emailSent = true only after response.ok — failed sends can retry ✅
+    (retry happens if same user completes another flow — unlikely in MVP
+    but architecturally correct)
+
+Minor INSTALLATIONS UX polish backlog (NOT blocking):
+- Remove repeated "Razumijem" in B1/B4 demolition intro
+- Shorten some INSTALLATIONS prompts
 
 Future vision (post-MVP):
 - Multi-channel: Instagram, WhatsApp, Viber
 - Bot-as-a-Service for other local businesses (SaaS model)
+- Infrastructure: Render → VPS (Hetzner) → Dedicated Server
+- Own domain (majstorbanjaluka.ba) for better email deliverability
+  (DKIM, DMARC, SPF — currently using Gmail freemail domain via Brevo)
 
 ================================================================
 SECTION 12 — ROADMAP
 ================================================================
 
-[1]     Multi-user sessions (Map by sender ID)                  ✅ DONE
-[2a]    classifyBranch() — DEVICES / INSTALLATIONS / UNKNOWN    ✅ DONE
-[2b]    Branch A flow — DEVICES (full data collection)          ✅ DONE
-[2b+]   extractDeviceType() — UX auto-detection                 ✅ DONE
-[2c]    Branch B flow — INSTALLATIONS (full data collection)    ✅ DONE
-[2d]    Stabilization — normalizeText, validation, UX fixes     ✅ DONE
-[3a]    Webhook foundation (GET/POST /webhook)                   ✅ DONE
-[3b]    Deploy to Render (public HTTPS endpoint)                 ✅ DONE
-[3c]    Connect webhook in Meta + Messenger Send API             ✅ DONE
-[4a]    Image/attachment handling in POST /webhook               ✅ DONE
-        - image attachments handled, URL stored in session.photos[]
-        - non-image attachments rejected with user-facing message
-        - maximum 2 photos enforced, excess ignored
-        - ASK_PHOTOS no longer treats text input as photo
-        - res.status(200) moved to end of handler (delayed reply fix)
-        - debug logging added with [4a] prefix
-[4b-UX] UX Refactor — DEVICES v2                                ✅ DONE
-        - START fix: first message now processed immediately
-        - handleAskService() extracted — shared START + ASK_SERVICE logic
-        - Greeting detection (zdravo, dobar dan, hej...)
-        - Contact intent detection (kako da Vas kontaktiram...)
-        - extractDeviceType() bug fixed — dishwasher before washing machine
-        - getDeviceInstrumental() — BHS grammar helper
-        - getModelHint() — device-specific label location hints
-        - model "nepoznat" fallback for unknown model
-        - "zabilježeno" removed from DEVICES flow
-        - Location moved to end of DEVICES flow (contact block)
-        - ASK_CONFIRMATION state added before contact block
-        - ASK_PHONE with phoneRefusedOnce retry logic
-        - ASK_LOCATION optional (skip with "dalje")
-        - ASK_NAME optional (skip with "dalje")
-        - DEVICES summary updated — clean format with emojis
-        - INSTALLATIONS flow untouched ✅
-[4c-UX] UX Refactor — INSTALLATIONS v2                          ← NEXT TASK
-        Spec: MAJSTOR_BL_INSTALLATIONS_FLOW_v2.md
-        - Add mountingMode logic (wall/ceiling/freestanding/unknown)
-        - Add itemReady field + conditional B4 brand/model
-        - Add extractInstallationType() — equivalent of extractDeviceType()
-        - Remove all "zabilježeno" patterns from INSTALLATIONS
-        - Split contact block (phone → location → name)
-        - Add ASK_CONFIRMATION state
-        - Add Quick Reply buttons for photo step
-        - Add notes[] to session model
-        - Clean up dead code: old DEVICES CONFIRM_REQUEST block
-        - Update INSTALLATIONS summary format
-        NOTE: Do INSTALLATIONS v2 only. Do NOT touch DEVICES flow.
-[5]     AI layer (adapter pattern: Gemini / Claude / GPT)        ← after [4c-UX]
-[6]     Send summary to technician (email)                       ← after [5]
-[7]     Google Sheets integration (lead logging)                 ← after [6]
-[8]     Meta App Review (for public users)                       ← after [7]
+[1]     Multi-user sessions                                    ✅ DONE
+[2a]    classifyBranch()                                       ✅ DONE
+[2b]    Branch A — DEVICES flow                               ✅ DONE
+[2b+]   extractDeviceType()                                    ✅ DONE
+[2c]    Branch B — INSTALLATIONS flow                         ✅ DONE
+[2d]    Stabilization                                          ✅ DONE
+[3a]    Webhook foundation                                     ✅ DONE
+[3b]    Deploy to Render                                       ✅ DONE
+[3c]    Messenger webhook + Send API                           ✅ DONE
+[4a]    Image/attachment handling in POST /webhook             ✅ DONE
+[4b-UX] UX Refactor — DEVICES v2                              ✅ DONE
+[4c-UX] UX Refactor — INSTALLATIONS v2                        ✅ DONE / STABLE
+        Commit: 931284b — 39/39, 14/14, 79/79 PASS
+[4d-UX] DEVICES flow polish + keyword matrix fix               ✅ DONE / STABLE
+        Commit: 90a5cc1 — 28/28 PASS
+        - shouldAskDeviceInstallType(), devicesPhotoPrompt()
+        - Expanded extractDeviceType() and keyword matrix
+        - Room question removed; summary null fix
+[5]     Technician Email Notification MVP                      ✅ DONE / PRODUCTION VERIFIED
+        Commit: 55f9a73 — Brevo HTTP API
+        - createSession() extended: summaryNotes: [], emailSent: false
+        - buildTechnicianEmail(session) — pure function, exported for testing
+        - sendSummaryEmail(session) — async, non-blocking, Brevo HTTP API
+        - test-email-builder.js — 14/14 PASS
+        - Total tests: 174/174 PASS
+        - Messenger smoke test: DEVICES + INSTALLATIONS, with + without photos
+        - Render log confirmed: "Technician email notification sent."
+        - Lead delivery path: Messenger → bot → Brevo → Gmail ✅ LIVE
+
+        SMTP history (for reference):
+        [5a] Gmail SMTP port 465 → IPv6 ENETUNREACH on Render
+        [5b] Gmail SMTP port 587 → IPv6 ENETUNREACH on Render
+        [5c] DNS ipv4first workaround → Connection timeout
+        [5d] Brevo HTTP API → SUCCESS ✅
+
+[6g]    Android Messenger Quick Reply "Dalje" fix             ✅ DONE
+        Regression-safe bugfix — no flow/email/keyword logic changed.
+        - isContinueAnswer(text) added next to normalizeText().
+        - Strict === "dalje" checks replaced by isContinueAnswer() at
+          ASK_PHOTOS, ASK_LOCATION, ASK_NAME.
+        - Quick Reply title changed "➡️ Dalje" → "Dalje" (payload stays
+          "Dalje"). Stops Android sending the emoji title back as text.
+        - isContinueAnswer exported for testing.
+        - test-continue-answer-quickreply.js — 27/27 PASS.
+        - Full suite: 201/201 PASS.
+        Result: Android Messenger Quick Reply "Dalje" now advances the
+        flow; Messenger Web behavior preserved; no photo-prompt loop.
+
+[6]     Meta App Review preparation + Privacy Policy           ⏸ PAUSED
+        Was NEXT — now PAUSED, NOT abandoned.
+        Reason: Meta account is currently under restriction, and there
+        is no registered business documentation yet, so Meta App Review
+        / Business Portfolio verification cannot proceed at this time.
+        Privacy Policy draft exists (privacy-policy.html) and is kept
+        for when this is resumed.
+        Resume condition: Meta restriction cleared AND/OR registered
+        business documentation available.
+        Original needs (still valid when resumed):
+          - Privacy Policy URL (simple webpage)
+          - Description of business purpose
+          - Demo video of functional bot conversation
+          - Complete conversation example for reviewer
+
+        STRATEGIC DIRECTION — AKiPP
+        Automatizacija Komunikacije i Prikupljanja Podataka
+        (Automation of Communication and Data Collection)
+        While Meta App Review is paused, the project pivots toward a
+        channel-agnostic, reusable lead-capture engine. The goal is a
+        bot core that automates client communication and structured
+        data collection independently of any single platform — so the
+        same engine can serve Messenger today and other channels later
+        without rewriting the flow logic. This makes the product less
+        dependent on Meta approval timelines and lays the groundwork for
+        the future Bot-as-a-Service vision.
+
+[7a]    Channel Adapter Foundation                            ← NEXT (recommended)
+        First step of the AKiPP direction. NO behavior change.
+        Introduce a thin transport/channel adapter boundary so the core
+        processMessage() flow is decoupled from the Messenger-specific
+        send/receive code. Pure structural groundwork:
+          - Isolate Messenger send/receive behind an adapter interface.
+          - processMessage() stays a pure function — unchanged behavior.
+          - All 201 tests must still pass unchanged.
+        This prepares multi-channel support (Web widget, Viber, WhatsApp,
+        Instagram) WITHOUT touching DEVICES/INSTALLATIONS/email logic.
+
+[7]     Production smoke test with real clients               ← after channel work
+        Run with real clients, collect edge cases.
+        Real data informs AI layer design.
+
+[8]     Google Sheets lead logging                            ← optional
+        One row per completed session.
+        May be skipped if email is sufficient.
+
+[9]     AI layer (adapter pattern: Gemini / Claude / GPT)     ← after [7]
+        Implement AFTER real production usage.
+        Real user data will reveal what AI needs to improve.
 
 ================================================================
 NOTES FOR CLAUDE CODE
@@ -673,8 +644,22 @@ NOTES FOR CLAUDE CODE
 - Active project folder: MajstorBL_GPT
 - Entry point for logic:  src/app.js
 - Entry point for server: src/server.js
-- Flow specification:     MAJSTOR_BL_DEVICES_FLOW_v2.md (DEVICES)
-                          MAJSTOR_BL_INSTALLATIONS_FLOW_v2.md (INSTALLATIONS)
+- Flow specs:  MAJSTOR_BL_DEVICES_FLOW_v2.md (DEVICES)
+               MAJSTOR_BL_INSTALLATIONS_FLOW_v2.md (INSTALLATIONS)
+- Test files (root folder, never delete):
+    test-email-builder.js  (14 tests — unit test, NO server needed)
+    test-installations-keywords.js  (39 tests — server required)
+    test-installations-keywords-v2.js  (14 tests — server required)
+    test-installations-keywords-master.js  (79 tests — server required)
+    test-devices-flow-polish.js  (28 tests — server required)
+    test-continue-answer-quickreply.js  (27 tests — Part A unit / Part B server)
+- ALWAYS run ALL six test suites before committing.
+- ALWAYS Ctrl+S before git add/commit/push.
+- Do NOT touch DEVICES flow unless explicitly asked.
+- Do NOT touch INSTALLATIONS flow unless explicitly asked.
+- Do NOT touch email functions unless explicitly asked.
+- Do NOT add new states to processMessage() without mapping them in
+  continueInstallationsFlow() or the DEVICES state machine.
 
 ================================================================
 END OF DOCUMENT

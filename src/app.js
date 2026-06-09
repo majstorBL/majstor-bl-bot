@@ -49,6 +49,24 @@ function normalizeText(text) {
   return (text || "").toString().trim().toLowerCase();
 }
 
+// [6g] Continue/Skip intent detector for the "Dalje" answer.
+// Messenger Web sends the Quick Reply payload ("Dalje") as plain text, but the
+// Android Messenger app sends back the visible TITLE instead, which used to be
+// "➡️ Dalje". Strict matching (=== "dalje") then failed and the photo prompt
+// looped. This helper strips emoji/symbol/punctuation noise and keeps only
+// letters/numbers/spaces, so any harmless decoration around the word "dalje"
+// (arrows, dots, exclamation marks, surrounding spaces) is accepted.
+// Uses a character class without Unicode property escapes for maximum Node
+// compatibility: keep BHS/ASCII letters, digits and spaces, drop everything
+// else (which covers emoji, arrow glyphs and punctuation).
+function isContinueAnswer(text) {
+  const cleaned = normalizeText(text)
+    .replace(/[^a-z0-9čćđšžáàâäéèêëíìîïóòôöúùûü\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned === "dalje";
+}
+
 // Keyword-based branch classifier — no AI, plain text matching
 // Returns "DEVICES", "INSTALLATIONS", or "UNKNOWN"
 function classifyBranch(text) {
@@ -567,7 +585,7 @@ function shouldAskDeviceInstallType(deviceType) {
 
 // [4d-UX] Standard DEVICES photo step prompt — aligned with the INSTALLATIONS
 // photo prompt: max 2 photos, video not supported, "Dalje" guidance. Quick
-// Reply ("➡️ Dalje") is attached in the Messenger webhook when state is
+// Reply ("Dalje") is attached in the Messenger webhook when state is
 // ASK_PHOTOS.
 function devicesPhotoPrompt() {
   return (
@@ -1537,7 +1555,7 @@ function shouldAskStandaloneOrBuiltIn(itemName) {
 }
 
 // Standard INSTALLATIONS photo step prompt. Used by all paths converging at
-// ASK_PHOTOS. Quick Reply ("➡️ Dalje") is attached in the Messenger webhook.
+// ASK_PHOTOS. Quick Reply ("Dalje") is attached in the Messenger webhook.
 function installationsPhotoPrompt() {
   return (
     "Bot: Ako želite, pošaljite fotografiju trenutnog stanja ili mjesta montaže kroz Messenger " +
@@ -2142,7 +2160,7 @@ function processMessage(userId, tekst) {
   } else if (session.state === "ASK_LOCATION") {
     // Contact-block location step — shared by DEVICES v2 and INSTALLATIONS v2.
     // Optional in both branches: user can type "dalje" to skip.
-    if (normalizeText(tekst) !== "dalje") {
+    if (!isContinueAnswer(tekst)) {
       session.location = tekst;
     }
     session.state = "ASK_NAME";
@@ -2306,7 +2324,7 @@ function processMessage(userId, tekst) {
     session.dimensions = tekst;
     return continueInstallationsFlow(session, "ASK_DIMENSIONS");
   } else if (session.state === "ASK_PHOTOS") {
-    if (normalizeText(tekst) === "dalje") {
+    if (isContinueAnswer(tekst)) {
       // Both branches converge on ASK_CONFIRMATION.
       session.state = "ASK_CONFIRMATION";
       if (session.branch === "INSTALLATIONS") {
@@ -2392,7 +2410,7 @@ function processMessage(userId, tekst) {
     return "Bot: Možete li poslati adresu ili naselje gdje bi serviser trebao doći? Ako ne želite tačnu adresu, napišite samo naselje ili dio grada. Ako želite preskočiti, napišite Dalje.";
   } else if (session.state === "ASK_NAME") {
     // Optional — "dalje" skips name; summary is generated immediately after
-    if (normalizeText(tekst) !== "dalje") {
+    if (!isContinueAnswer(tekst)) {
       session.name = tekst;
     }
     session.state = "END";
@@ -2548,9 +2566,9 @@ function sendMessengerReply(recipientId, messageText) {
 }
 
 // ── Sends a Messenger reply with Quick Reply buttons ──────────────────────
-// Used only by the INSTALLATIONS ASK_PHOTOS step. quickReplies is an array of
-// { title, payload } objects; Messenger sends back the payload as the user's
-// next message when the button is clicked.
+// Used on the ASK_PHOTOS step for BOTH DEVICES and INSTALLATIONS branches.
+// quickReplies is an array of { title, payload } objects; Messenger sends back
+// the payload as the user's next message when the button is clicked.
 function sendMessengerQuickReply(recipientId, messageText, quickReplies) {
   const body = JSON.stringify({
     recipient: { id: recipientId },
@@ -2781,7 +2799,7 @@ app.post("/webhook", (req, res) => {
           `[webhook] → sendMessengerQuickReply: ASK_PHOTOS to ${senderId}`,
         );
         sendMessengerQuickReply(senderId, messengerText, [
-          { title: "➡️ Dalje", payload: "Dalje" },
+          { title: "Dalje", payload: "Dalje" },
         ]);
       } else {
         console.log(
@@ -2823,3 +2841,5 @@ module.exports = app;
 // which only consumes the Express app instance.
 module.exports.buildTechnicianEmail = buildTechnicianEmail;
 module.exports.createSession = createSession;
+// [6g] Exposed for the Quick Reply "Dalje" regression unit test.
+module.exports.isContinueAnswer = isContinueAnswer;

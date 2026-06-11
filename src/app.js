@@ -2863,20 +2863,37 @@ app.get("/next", (req, res) => {
 
   // [7a] Browser testing uses the "test" channel internally. Behavior is
   // unchanged from the caller's point of view — only the internal session key
-  // becomes "test:<userId>". /next and /reset use the same channel, so a reset
-  // still clears the exact session that /next reads.
+  // becomes "test:<userId>". GET /reset clears this same "test:<userId>" key
+  // (and "messenger:<userId>") so the reset always targets the session /next
+  // reads.
   const reply = handleIncomingText({ channel: "test", userId, text: tekst });
   return res.send(reply);
 });
 
 app.get("/reset", (req, res) => {
   const userId = req.query.userId || "test-user";
+  const channel = req.query.channel;
 
-  // Reset only this user's session, leave all others untouched. Same "test"
-  // channel key as GET /next so the reset targets the right session. [7a]
-  sessions[buildSessionKey("test", userId)] = createSession();
+  // [7a-hotfix] After channel-aware session keys, a plain /reset that only
+  // cleared "test:<userId>" no longer cleared the real Messenger session
+  // ("messenger:<senderId>"), so manual Messenger smoke testing could stay
+  // stuck in END. Default behavior now resets BOTH the test and messenger
+  // sessions for the given id, restoring the simple manual workflow. An
+  // explicit ?channel= still allows targeting a single channel.
+  if (channel) {
+    sessions[buildSessionKey(channel, userId)] = createSession();
+    return res.send(
+      `Bot session resetovana za korisnika: ${userId} (channel: ${channel})`,
+    );
+  }
 
-  res.send(`Bot session resetovana za korisnika: ${userId}`);
+  const channels = ["test", "messenger"];
+  channels.forEach((ch) => {
+    sessions[buildSessionKey(ch, userId)] = createSession();
+  });
+  res.send(
+    `Bot session resetovana za korisnika: ${userId} (channels: ${channels.join(", ")})`,
+  );
 });
 
 module.exports = app;

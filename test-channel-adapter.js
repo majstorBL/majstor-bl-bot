@@ -123,6 +123,29 @@ check(
   `Reply: ${summary}`,
 );
 
+// ── /reset key contract (Task [7a-hotfix]) ──────────────────────────────────
+// GET /reset with no ?channel clears BOTH "test:<id>" and "messenger:<id>" so
+// manual Messenger smoke testing (/reset?userId=<senderId>) works again; an
+// explicit ?channel clears only that single channel. These are the exact keys
+// the route builds — verified here without needing the server.
+const rid = "12345";
+check(
+  '/reset default targets the test key "test:12345"',
+  buildSessionKey("test", rid) === "test:12345",
+  `got ${buildSessionKey("test", rid)}`,
+);
+check(
+  '/reset default also targets the messenger key "messenger:12345"',
+  buildSessionKey("messenger", rid) === "messenger:12345",
+  `got ${buildSessionKey("messenger", rid)}`,
+);
+check(
+  '/reset explicit ?channel=messenger targets only "messenger:12345"',
+  buildSessionKey("messenger", rid) === "messenger:12345" &&
+    buildSessionKey("messenger", rid) !== buildSessionKey("test", rid),
+  `messenger=${buildSessionKey("messenger", rid)} test=${buildSessionKey("test", rid)}`,
+);
+
 // ── Result ──────────────────────────────────────────────────────────────────
 console.log(`\nCHANNEL ADAPTER: ${pass}/${pass + fail} PASS`);
 if (fail > 0) process.exit(1);

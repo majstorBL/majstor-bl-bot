@@ -91,7 +91,7 @@ test-installations-keywords-v2.js      — Messenger bug regression suite, 14 te
 test-installations-keywords-master.js  — master keyword matrix suite, 79 tests
 test-devices-flow-polish.js            — DEVICES polish regression suite, 28 tests
 test-continue-answer-quickreply.js     — Quick Reply "Dalje" regression suite, 27 tests
-test-channel-adapter.js                — Channel adapter foundation suite, 8 tests
+test-channel-adapter.js                — Channel adapter foundation suite, 11 tests
 
 Entry point: src/server.js  (package.json → "start": "node src/server.js")
 Deployed at: Render.com (auto-deploy from GitHub)
@@ -300,8 +300,8 @@ test-installations-keywords-v2.js      — 14 tests  — 14/14 PASS ✅
 test-installations-keywords-master.js  — 79 tests  — 79/79 PASS ✅
 test-devices-flow-polish.js            — 28 tests  — 28/28 PASS ✅
 test-continue-answer-quickreply.js     — 27 tests  — 27/27 PASS ✅
-test-channel-adapter.js                — 8 tests   — 8/8 PASS ✅
-TOTAL:                                  209 tests  — 209/209 PASS ✅
+test-channel-adapter.js                — 11 tests  — 11/11 PASS ✅
+TOTAL:                                  212 tests  — 212/212 PASS ✅
 
 MANDATORY — run ALL before any commit:
   node --check src/app.js
@@ -334,9 +334,19 @@ GET  /webhook                      — Meta webhook verification
 POST /webhook                      — Messenger events + reply
 GET  /next?userId=...&tekst=...    — browser testing endpoint
 GET  /reset?userId=...             — resets session for specific user
+GET  /reset?userId=...&channel=... — resets only that channel's session
 
 GET /next and GET /reset are temporary testing endpoints.
 Core production flow runs through POST /webhook only.
+
+[7a-hotfix] GET /reset behavior with channel-aware session keys:
+  /reset?userId=<id>                    → resets BOTH test:<id> and messenger:<id>
+  /reset?userId=<id>&channel=test       → resets only test:<id>
+  /reset?userId=<id>&channel=messenger  → resets only messenger:<id>
+After [7a] introduced "channel:userId" keys, a plain /reset only cleared
+test:<id>, so a Messenger session ("messenger:<senderId>") could stay stuck.
+The default reset now clears both, restoring manual Messenger smoke testing
+while GET /next keeps using the test:<userId> session.
 
 module.exports exposes five additional symbols for testing:
   module.exports.buildTechnicianEmail  — pure function, safe to import
@@ -645,8 +655,8 @@ SECTION 12 — ROADMAP
             /next + GET /reset).
           - processMessage() stays a pure function — unchanged behavior.
           - Both helpers exported via module.exports for testing.
-          - test-channel-adapter.js — 8/8 PASS.
-          - Full suite: 209/209 PASS.
+          - test-channel-adapter.js — 11/11 PASS.
+          - Full suite: 212/212 PASS.
         NOTE: changing Messenger from raw senderId to messenger:<senderId>
         resets active in-memory Messenger sessions on the next deploy. This is
         harmless — sessions are in-memory only and already reset on every
@@ -694,7 +704,7 @@ NOTES FOR CLAUDE CODE
     test-installations-keywords-master.js  (79 tests — server required)
     test-devices-flow-polish.js  (28 tests — server required)
     test-continue-answer-quickreply.js  (27 tests — Part A unit / Part B server)
-    test-channel-adapter.js  (8 tests — pure in-memory unit test, NO server needed)
+    test-channel-adapter.js  (11 tests — pure in-memory unit test, NO server needed)
 - ALWAYS run ALL seven test suites before committing.
 - ALWAYS Ctrl+S before git add/commit/push.
 - Do NOT touch DEVICES flow unless explicitly asked.

@@ -67,6 +67,19 @@ function isContinueAnswer(text) {
   return cleaned === "dalje";
 }
 
+// ── Channel/session adapter foundation (Task [7a]) ──────────────────────────
+// Builds a channel-aware session key so different channels never collide on
+// the same raw user id. Messenger user "12345" and a future Web/Viber user
+// "12345" must map to DIFFERENT sessions, e.g. "messenger:12345" vs
+// "web:12345". Pure string helper — no side effects, safe to unit-test.
+// NOTE: switching Messenger from the raw senderId to "messenger:<senderId>"
+// resets active in-memory sessions on the next deploy. This is harmless
+// because sessions already live only in memory and reset on every Render
+// restart/deploy.
+function buildSessionKey(channel, userId) {
+  return `${channel}:${userId}`;
+}
+
 // Keyword-based branch classifier — no AI, plain text matching
 // Returns "DEVICES", "INSTALLATIONS", or "UNKNOWN"
 function classifyBranch(text) {
@@ -2526,6 +2539,17 @@ Naš serviser će Vas kontaktirati u najkraćem roku!`;
   return "Bot: Hvala Vam. Ako budete imali novi zahtjev, slobodno nam ponovo pišite.";
 }
 
+// ── Channel-agnostic entry point (Task [7a]) ────────────────────────────────
+// Thin wrapper that builds the channel-aware session key and delegates to the
+// existing processMessage() state machine, returning EXACTLY the same reply
+// string. Behavior is unchanged — this only standardises how any channel hands
+// an incoming text message to the core bot, so future channels (Web, Viber,
+// WhatsApp) can reuse the same flow without raw user-id collisions.
+function handleIncomingText({ channel, userId, text }) {
+  const sessionKey = buildSessionKey(channel, userId);
+  return processMessage(sessionKey, text);
+}
+
 // ── Sends a text reply to a Messenger user via the Facebook Send API ───────
 // Makes a POST to graph.facebook.com/v18.0/me/messages with the reply text.
 // Uses PAGE_ACCESS_TOKEN from environment variables — never hardcoded.
@@ -2689,6 +2713,14 @@ app.post("/webhook", (req, res) => {
 
       if (!senderId) return;
 
+      // [7a] Channel-aware session key. BOTH the text path and the photo/
+      // attachment path below MUST use this exact same key, otherwise photos
+      // and text would land in two different sessions for the same Messenger
+      // user. buildSessionKey is deterministic, so handleIncomingText() (text)
+      // and sessions[sessionKey] (attachments) always resolve to the same
+      // "messenger:<senderId>" session.
+      const sessionKey = buildSessionKey("messenger", senderId);
+
       const attachments = event.message?.attachments;
       const text = event.message?.text;
 
@@ -2696,11 +2728,11 @@ app.post("/webhook", (req, res) => {
       // If the event contains attachments, handle them and skip text processing.
       // Messenger sends photos as attachments with type "image".
       if (attachments && attachments.length > 0) {
-        // Ensure a session exists for this user
-        if (!sessions[senderId]) {
-          sessions[senderId] = createSession();
+        // Ensure a session exists for this user (same channel-aware key as text)
+        if (!sessions[sessionKey]) {
+          sessions[sessionKey] = createSession();
         }
-        const session = sessions[senderId];
+        const session = sessions[sessionKey];
 
         let imageCount = 0; // how many image attachments were in this event
         let storedCount = 0; // how many we actually saved (respecting the 2-photo cap)
@@ -2785,15 +2817,21 @@ app.post("/webhook", (req, res) => {
 
       console.log(`Messenger message from ${senderId}: ${inputText}`);
 
-      // Run through the same state machine used by GET /next
-      const reply = processMessage(senderId, inputText);
+      // [7a] Run through the same state machine used by GET /next, via the
+      // channel-aware wrapper. handleIncomingText() builds the identical
+      // "messenger:<senderId>" key used by the attachment path above.
+      const reply = handleIncomingText({
+        channel: "messenger",
+        userId: senderId,
+        text: inputText,
+      });
 
       // Strip the "Bot: " prefix — it is only for the browser testing endpoint
       const messengerText = reply.trim().replace(/^Bot:\s*/, "");
 
       // Send with Quick Reply on the photo step so the user has a clear
       // "Dalje" button without having to type the word.
-      const sessionAfter = sessions[senderId];
+      const sessionAfter = sessions[sessionKey];
       if (sessionAfter && sessionAfter.state === "ASK_PHOTOS") {
         console.log(
           `[webhook] → sendMessengerQuickReply: ASK_PHOTOS to ${senderId}`,
@@ -2823,15 +2861,20 @@ app.get("/next", (req, res) => {
   const userId = req.query.userId || "test-user";
   const tekst = req.query.tekst;
 
-  const reply = processMessage(userId, tekst);
+  // [7a] Browser testing uses the "test" channel internally. Behavior is
+  // unchanged from the caller's point of view — only the internal session key
+  // becomes "test:<userId>". /next and /reset use the same channel, so a reset
+  // still clears the exact session that /next reads.
+  const reply = handleIncomingText({ channel: "test", userId, text: tekst });
   return res.send(reply);
 });
 
 app.get("/reset", (req, res) => {
   const userId = req.query.userId || "test-user";
 
-  // Reset only this user's session, leave all others untouched
-  sessions[userId] = createSession();
+  // Reset only this user's session, leave all others untouched. Same "test"
+  // channel key as GET /next so the reset targets the right session. [7a]
+  sessions[buildSessionKey("test", userId)] = createSession();
 
   res.send(`Bot session resetovana za korisnika: ${userId}`);
 });
@@ -2843,3 +2886,7 @@ module.exports.buildTechnicianEmail = buildTechnicianEmail;
 module.exports.createSession = createSession;
 // [6g] Exposed for the Quick Reply "Dalje" regression unit test.
 module.exports.isContinueAnswer = isContinueAnswer;
+// [7a] Exposed for the channel adapter foundation regression test. These do
+// not change server behavior — server.js only consumes the Express app.
+module.exports.buildSessionKey = buildSessionKey;
+module.exports.handleIncomingText = handleIncomingText;

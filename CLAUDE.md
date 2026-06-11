@@ -1,7 +1,8 @@
 ================================================================
 MAJSTOR BANJALUKA — CHATBOT PROJECT
 Master Context Document for Claude Code
-Last updated: June 2026 (Task [6g] Android Messenger Quick Reply "Dalje" fix ✅ DONE)
+Last updated: June 2026 (Task [7a] Channel Adapter Foundation ✅ DONE)
+              (Task [6g] Android Messenger Quick Reply "Dalje" fix ✅ DONE)
               (Task [5] Email Notification ✅ DONE / PRODUCTION VERIFIED)
 ================================================================
 This file is named CLAUDE.md — Claude Code reads it automatically
@@ -90,6 +91,7 @@ test-installations-keywords-v2.js      — Messenger bug regression suite, 14 te
 test-installations-keywords-master.js  — master keyword matrix suite, 79 tests
 test-devices-flow-polish.js            — DEVICES polish regression suite, 28 tests
 test-continue-answer-quickreply.js     — Quick Reply "Dalje" regression suite, 27 tests
+test-channel-adapter.js                — Channel adapter foundation suite, 8 tests
 
 Entry point: src/server.js  (package.json → "start": "node src/server.js")
 Deployed at: Render.com (auto-deploy from GitHub)
@@ -107,7 +109,23 @@ SECTION 4 — CURRENT CODE STATE (src/app.js)
 CURRENT IMPLEMENTATION STATUS:
 
 CORE / SHARED:
-- Multi-user sessions (sessions{} keyed by userId) ✅
+- Multi-user sessions (sessions{} keyed by channel-aware key) ✅
+  As of Task [7a], sessions are keyed by "channel:userId", NOT raw userId:
+    messenger:<senderId>   — all Messenger text AND photo attachments
+    test:<userId>          — GET /next and GET /reset (browser testing)
+  This prevents session key collisions across future channels (a Messenger
+  user "12345" and a future Web/Viber user "12345" get separate sessions).
+  NOTE: switching Messenger from raw senderId to "messenger:<senderId>" resets
+  active in-memory Messenger sessions on the next deploy. This is harmless —
+  sessions already live only in memory and reset on every Render restart/deploy.
+- buildSessionKey(channel, userId) — pure helper, returns "channel:userId" ✅
+  (Task [7a]). No side effects. Exported via module.exports for testing.
+- handleIncomingText({ channel, userId, text }) — channel-agnostic entry ✅
+  (Task [7a]). Builds the channel-aware key via buildSessionKey() and calls
+  the existing processMessage(sessionKey, text), returning the SAME reply
+  string. Used by POST /webhook (channel "messenger") and GET /next
+  (channel "test"). No behavior change — pure structural groundwork for AKiPP
+  multi-channel support. Exported via module.exports for testing.
 - normalizeText() — trims, lowercases, null-safe ✅
 - isContinueAnswer(text) — Android Messenger Quick Reply continue/skip
   detector ✅ (Task [6g]). Normalizes input, strips emoji/symbol/
@@ -282,7 +300,8 @@ test-installations-keywords-v2.js      — 14 tests  — 14/14 PASS ✅
 test-installations-keywords-master.js  — 79 tests  — 79/79 PASS ✅
 test-devices-flow-polish.js            — 28 tests  — 28/28 PASS ✅
 test-continue-answer-quickreply.js     — 27 tests  — 27/27 PASS ✅
-TOTAL:                                  201 tests  — 201/201 PASS ✅
+test-channel-adapter.js                — 8 tests   — 8/8 PASS ✅
+TOTAL:                                  209 tests  — 209/209 PASS ✅
 
 MANDATORY — run ALL before any commit:
   node --check src/app.js
@@ -292,9 +311,13 @@ MANDATORY — run ALL before any commit:
   node test-installations-keywords-master.js
   node test-devices-flow-polish.js
   node test-continue-answer-quickreply.js
+  node test-channel-adapter.js
 
 Note: test-email-builder.js tests buildTechnicianEmail() in isolation.
 No server needed — it is a pure function unit test.
+test-channel-adapter.js is also a pure in-memory test (NO server needed) —
+it tests buildSessionKey() and handleIncomingText() session continuity and
+channel isolation directly via module.exports.
 test-continue-answer-quickreply.js has two parts: Part A unit-tests
 isContinueAnswer() with NO server; Part B runs HTTP flow tests that
 require the server. Run it with the server active to exercise both parts.
@@ -315,10 +338,12 @@ GET  /reset?userId=...             — resets session for specific user
 GET /next and GET /reset are temporary testing endpoints.
 Core production flow runs through POST /webhook only.
 
-module.exports exposes three additional symbols for testing:
+module.exports exposes five additional symbols for testing:
   module.exports.buildTechnicianEmail  — pure function, safe to import
   module.exports.createSession         — session factory, safe to import
   module.exports.isContinueAnswer      — Quick Reply "Dalje" detector ([6g])
+  module.exports.buildSessionKey       — channel-aware session key helper ([7a])
+  module.exports.handleIncomingText    — channel-agnostic entry wrapper ([7a])
 
 ================================================================
 SECTION 5 — TOP-LEVEL ROUTING
@@ -608,16 +633,32 @@ SECTION 12 — ROADMAP
         dependent on Meta approval timelines and lays the groundwork for
         the future Bot-as-a-Service vision.
 
-[7a]    Channel Adapter Foundation                            ← NEXT (recommended)
+[7a]    Channel Adapter Foundation                            ✅ DONE
         First step of the AKiPP direction. NO behavior change.
-        Introduce a thin transport/channel adapter boundary so the core
-        processMessage() flow is decoupled from the Messenger-specific
-        send/receive code. Pure structural groundwork:
-          - Isolate Messenger send/receive behind an adapter interface.
+        Channel-aware session keys introduced so the core processMessage()
+        flow is no longer tied to a raw, channel-specific user id.
+        Pure structural groundwork — no flow/email/keyword/UX change:
+          - buildSessionKey(channel, userId) → "channel:userId".
+          - handleIncomingText({channel, userId, text}) wraps processMessage().
+          - Sessions now keyed as messenger:<senderId> (Messenger text AND
+            photo attachments share the SAME key) and test:<userId> (GET
+            /next + GET /reset).
           - processMessage() stays a pure function — unchanged behavior.
-          - All 201 tests must still pass unchanged.
+          - Both helpers exported via module.exports for testing.
+          - test-channel-adapter.js — 8/8 PASS.
+          - Full suite: 209/209 PASS.
+        NOTE: changing Messenger from raw senderId to messenger:<senderId>
+        resets active in-memory Messenger sessions on the next deploy. This is
+        harmless — sessions are in-memory only and already reset on every
+        Render restart/deploy.
         This prepares multi-channel support (Web widget, Viber, WhatsApp,
         Instagram) WITHOUT touching DEVICES/INSTALLATIONS/email logic.
+
+[7b]    Channel transport adapter (send/receive isolation)    ← NEXT (optional)
+        Possible follow-up to [7a]: isolate the Messenger-specific
+        send/receive code (sendMessengerReply / sendMessengerQuickReply /
+        webhook parsing) behind an adapter interface so a new channel can be
+        added without touching POST /webhook. NOT designed or implemented yet.
 
 [7]     Production smoke test with real clients               ← after channel work
         Run with real clients, collect edge cases.
@@ -653,7 +694,8 @@ NOTES FOR CLAUDE CODE
     test-installations-keywords-master.js  (79 tests — server required)
     test-devices-flow-polish.js  (28 tests — server required)
     test-continue-answer-quickreply.js  (27 tests — Part A unit / Part B server)
-- ALWAYS run ALL six test suites before committing.
+    test-channel-adapter.js  (8 tests — pure in-memory unit test, NO server needed)
+- ALWAYS run ALL seven test suites before committing.
 - ALWAYS Ctrl+S before git add/commit/push.
 - Do NOT touch DEVICES flow unless explicitly asked.
 - Do NOT touch INSTALLATIONS flow unless explicitly asked.

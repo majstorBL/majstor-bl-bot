@@ -146,6 +146,58 @@ check(
   `messenger=${buildSessionKey("messenger", rid)} test=${buildSessionKey("test", rid)}`,
 );
 
+// ── Channel Transport Adapter (Task [7b]) ────────────────────────────────────
+// Pure helpers for the Messenger transport boundary. No server, no network.
+const {
+  CHANNEL_MESSENGER,
+  buildMessengerSessionKey,
+  extractMessengerInput,
+} = app;
+
+check(
+  '[7b] CHANNEL_MESSENGER constant === "messenger"',
+  CHANNEL_MESSENGER === "messenger",
+  `got ${CHANNEL_MESSENGER}`,
+);
+
+check(
+  '[7b] buildMessengerSessionKey("12345") === "messenger:12345"',
+  buildMessengerSessionKey("12345") === "messenger:12345",
+  `got ${buildMessengerSessionKey("12345")}`,
+);
+
+check(
+  "[7b] buildMessengerSessionKey matches buildSessionKey(messenger, id)",
+  buildMessengerSessionKey("987") === buildSessionKey("messenger", "987"),
+  `got ${buildMessengerSessionKey("987")} vs ${buildSessionKey("messenger", "987")}`,
+);
+
+// extractMessengerInput prefers quick_reply.payload over message.text.
+check(
+  "[7b] extractMessengerInput prefers quick_reply.payload over text",
+  extractMessengerInput({
+    message: { text: "neki tekst", quick_reply: { payload: "Dalje" } },
+  }) === "Dalje",
+  `got ${extractMessengerInput({ message: { text: "neki tekst", quick_reply: { payload: "Dalje" } } })}`,
+);
+
+// Falls back to plain message text when there is no quick reply.
+check(
+  "[7b] extractMessengerInput returns message.text when no quick reply",
+  extractMessengerInput({ message: { text: "popravka veš mašine" } }) ===
+    "popravka veš mašine",
+  `got ${extractMessengerInput({ message: { text: "popravka veš mašine" } })}`,
+);
+
+// Returns null for attachment-only / empty events (caller then skips it).
+check(
+  "[7b] extractMessengerInput returns null for an attachment-only event",
+  extractMessengerInput({
+    message: { attachments: [{ type: "image", payload: { url: "x" } }] },
+  }) === null,
+  `got ${extractMessengerInput({ message: { attachments: [{ type: "image" }] } })}`,
+);
+
 // ── Result ──────────────────────────────────────────────────────────────────
 console.log(`\nCHANNEL ADAPTER: ${pass}/${pass + fail} PASS`);
 if (fail > 0) process.exit(1);

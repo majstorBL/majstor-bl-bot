@@ -2550,6 +2550,60 @@ function handleIncomingText({ channel, userId, text }) {
   return processMessage(sessionKey, text);
 }
 
+// ── Channel Transport Adapter — Messenger (Task [7b]) ───────────────────────
+// Thin adapter boundary between the Messenger webhook payload and the
+// channel-agnostic core (handleIncomingText / processMessage). These helpers
+// do NOT change behavior — they only group the Messenger-specific transport
+// decisions (channel name, session key, input extraction, send choice) in one
+// place so a future channel ([7c] Web/Internal) can be added without spreading
+// transport logic through POST /webhook. The low-level Send API functions
+// (sendMessengerReply / sendMessengerQuickReply) remain unchanged and keep
+// doing the actual Facebook API call.
+
+// Canonical channel name for Facebook Messenger. Used everywhere the Messenger
+// channel string is needed so it is never hardcoded inline.
+const CHANNEL_MESSENGER = "messenger";
+
+// Builds the Messenger session key for a given Facebook senderId. Wraps the
+// shared buildSessionKey() so BOTH the text path and the photo/attachment path
+// resolve to the exact same "messenger:<senderId>" session.
+function buildMessengerSessionKey(senderId) {
+  return buildSessionKey(CHANNEL_MESSENGER, senderId);
+}
+
+// Extracts the user's input text from a raw Messenger message event.
+// Quick Reply button clicks arrive with event.message.quick_reply.payload set;
+// we prefer that payload and fall back to the plain message text, so the state
+// machine sees a button tap the same as typed text. Returns null when there is
+// no usable text (e.g. delivery/read receipts, reactions, or attachment-only
+// events) — the caller then skips processing.
+function extractMessengerInput(event) {
+  const quickReplyPayload = event.message?.quick_reply?.payload;
+  const text = event.message?.text;
+  return quickReplyPayload || text || null;
+}
+
+// Sends a channel reply back to a Messenger user. Strips the "Bot: " prefix
+// (only meaningful for the browser /next endpoint) and decides between a plain
+// text reply and a Quick Reply "Dalje" button. The Quick Reply is sent ONLY
+// when the resulting session state is ASK_PHOTOS — identical to the previous
+// inline logic in POST /webhook.
+function sendMessengerChannelReply(recipientId, reply, session) {
+  const messengerText = reply.trim().replace(/^Bot:\s*/, "");
+
+  if (session && session.state === "ASK_PHOTOS") {
+    console.log(
+      `[webhook] → sendMessengerQuickReply: ASK_PHOTOS to ${recipientId}`,
+    );
+    sendMessengerQuickReply(recipientId, messengerText, [
+      { title: "Dalje", payload: "Dalje" },
+    ]);
+  } else {
+    console.log(`[webhook] → sendMessengerReply: text reply to ${recipientId}`);
+    sendMessengerReply(recipientId, messengerText);
+  }
+}
+
 // ── Sends a text reply to a Messenger user via the Facebook Send API ───────
 // Makes a POST to graph.facebook.com/v18.0/me/messages with the reply text.
 // Uses PAGE_ACCESS_TOKEN from environment variables — never hardcoded.
@@ -2719,7 +2773,7 @@ app.post("/webhook", (req, res) => {
       // user. buildSessionKey is deterministic, so handleIncomingText() (text)
       // and sessions[sessionKey] (attachments) always resolve to the same
       // "messenger:<senderId>" session.
-      const sessionKey = buildSessionKey("messenger", senderId);
+      const sessionKey = buildMessengerSessionKey(senderId);
 
       const attachments = event.message?.attachments;
       const text = event.message?.text;
@@ -2807,12 +2861,11 @@ app.post("/webhook", (req, res) => {
       }
 
       // ── Text message handling ──────────────────────────────────────────
-      // No attachments — process as a regular text message. Quick Reply
-      // button clicks arrive with event.message.quick_reply.payload set; we
-      // treat the payload as plain text so the state machine sees it the
-      // same as if the user typed it.
-      const quickReplyPayload = event.message?.quick_reply?.payload;
-      const inputText = quickReplyPayload || text;
+      // No attachments — process as a regular text message. The Messenger
+      // adapter helper extracts the input text (preferring a Quick Reply
+      // payload over the typed text), so the state machine sees a button tap
+      // the same as typed text.
+      const inputText = extractMessengerInput(event);
       if (!inputText) return; // delivery receipts, read receipts, reactions, etc.
 
       console.log(`Messenger message from ${senderId}: ${inputText}`);
@@ -2821,30 +2874,16 @@ app.post("/webhook", (req, res) => {
       // channel-aware wrapper. handleIncomingText() builds the identical
       // "messenger:<senderId>" key used by the attachment path above.
       const reply = handleIncomingText({
-        channel: "messenger",
+        channel: CHANNEL_MESSENGER,
         userId: senderId,
         text: inputText,
       });
 
-      // Strip the "Bot: " prefix — it is only for the browser testing endpoint
-      const messengerText = reply.trim().replace(/^Bot:\s*/, "");
-
-      // Send with Quick Reply on the photo step so the user has a clear
-      // "Dalje" button without having to type the word.
+      // [7b] Hand the reply to the Messenger channel adapter, which strips the
+      // "Bot: " prefix and chooses a plain text reply or the Quick Reply
+      // "Dalje" button (only at ASK_PHOTOS) — same behavior as before.
       const sessionAfter = sessions[sessionKey];
-      if (sessionAfter && sessionAfter.state === "ASK_PHOTOS") {
-        console.log(
-          `[webhook] → sendMessengerQuickReply: ASK_PHOTOS to ${senderId}`,
-        );
-        sendMessengerQuickReply(senderId, messengerText, [
-          { title: "Dalje", payload: "Dalje" },
-        ]);
-      } else {
-        console.log(
-          `[webhook] → sendMessengerReply: text reply to ${senderId}`,
-        );
-        sendMessengerReply(senderId, messengerText);
-      }
+      sendMessengerChannelReply(senderId, reply, sessionAfter);
     });
   });
 
@@ -2907,3 +2946,8 @@ module.exports.isContinueAnswer = isContinueAnswer;
 // not change server behavior — server.js only consumes the Express app.
 module.exports.buildSessionKey = buildSessionKey;
 module.exports.handleIncomingText = handleIncomingText;
+// [7b] Exposed for the Channel Transport Adapter regression test. Tests only —
+// server.js only consumes the Express app and is unaffected by these.
+module.exports.CHANNEL_MESSENGER = CHANNEL_MESSENGER;
+module.exports.buildMessengerSessionKey = buildMessengerSessionKey;
+module.exports.extractMessengerInput = extractMessengerInput;

@@ -1,9 +1,10 @@
 ================================================================
-MAJSTOR BANJALUKA — CHATBOT PROJECT
+MAJSTOR BANJA LUKA / AKiPP — CHATBOT + LEAD INTAKE SYSTEM
 Master Context Document for Claude Code
 Last updated: June 2026 (Task [7a] Channel Adapter Foundation ✅ DONE)
+              (Task [7a-hotfix] Restore Messenger reset ✅ DONE)
               (Task [6g] Android Messenger Quick Reply "Dalje" fix ✅ DONE)
-              (Task [5] Email Notification ✅ DONE / PRODUCTION VERIFIED)
+              (Task [5]  Email Notification ✅ DONE / PRODUCTION VERIFIED)
 ================================================================
 This file is named CLAUDE.md — Claude Code reads it automatically
 at the start of every session. No need to reference it manually.
@@ -17,258 +18,336 @@ Do NOT change existing chatbot behavior unless explicitly instructed.
 Refactoring must preserve all existing logic.
 When in doubt — ask, do not assume.
 
+Do NOT update CLAUDE.md unless explicitly instructed.
+After implementation and tests, only report what should be documented.
+CLAUDE.md updates are reviewed separately to avoid documentation drift.
+
+Each new technical task must be done in a new chat/session with narrow scope.
+Do not combine code refactor, new channel, AI layer, and documentation
+in the same task.
+
 ================================================================
 SECTION 1 — BUSINESS OVERVIEW
 ================================================================
 
 Business Name: Majstor Banjaluka
-Location: Banja Luka, Bosnia and Herzegovina
+Location:      Banja Luka, Bosnia and Herzegovina
 Services:
+  - Household appliance repair (white goods, boilers, washing machines,
+    small appliances, computers/electronics)
+  - Furniture assembly/disassembly
+  - Electrical installations (outlets, switches, lighting, TV mounts)
+  - Plumbing — external components only
+    (fixtures, faucets, valves, hoses, vodokotlici)
+  - Device installation (boilers, electric stoves, cooktops, range hoods)
 
-- Household appliance repair (white goods, boilers, washing machines,
-  small appliances, computers/electronics)
-- Furniture assembly/disassembly
-- Electrical installations (outlets, switches, lighting, TV mounts)
-- Plumbing — external components only
-  (fixtures, faucets, valves, hoses, vodokotlići)
-- Device installation (boilers, electric stoves, cooktops, range hoods)
-
-Target platform: Facebook Business Page (Messenger)
+Current production channel:   Facebook Messenger
+Strategic product direction:  AKiPP — channel-agnostic communication and
+                               data collection system
+Next planned real channel:    Web/Internal channel MVP
 
 ================================================================
 SECTION 2 — PROJECT GOAL
 ================================================================
 
-Build a Facebook Messenger chatbot that acts as a "smart receptionist":
+Build a channel-agnostic AKiPP lead intake system that currently runs
+through Facebook Messenger and will be extended to additional channels.
 
-- Engages clients in BHS (Bosnian/Croatian/Serbian)
-- Identifies the type of request (repair vs. installation)
-- Guides the client through a structured conversation
-- Collects all relevant data
-- Delivers a clean summary to the technician/majstor
-- Informs the client they will be contacted
+The bot / intake system does NOT repair, advise, price, or schedule.
 
-The bot does NOT repair, advise, price, or schedule.
+Core intake flow (channel-independent):
+  - User sends a message through any supported channel
+  - Bot identifies the type of request (repair vs. installation)
+  - Bot guides the user through a structured conversation
+  - Bot collects all relevant data
+  - Bot receives photos where the channel supports it
+  - Bot delivers a clean summary to the technician / business owner
+  - Bot informs the user they will be contacted
 
 ================================================================
 SECTION 3 — SYSTEM ARCHITECTURE
 ================================================================
 
-Client → FB Messenger → Webhook (POST /webhook)
-→ processMessage() → sendMessengerReply() → Client
-→ sendSummaryEmail() → Brevo HTTP API → Gmail (technician)
+Current production flow (Messenger):
 
-AI layer (future):
-processMessage() → AI Adapter → [Gemini / Claude / GPT] → reply
+  Client -> FB Messenger -> POST /webhook
+  -> Messenger receive handling
+  -> handleIncomingText({ channel: "messenger", userId, text })
+  -> processMessage(sessionKey, text)
+  -> Messenger send handling
+  -> Client
 
-Note: AI provider is interchangeable via adapter pattern.
-      Development/testing phase: Gemini Flash (free tier).
-      Production phase: to be decided based on performance and cost.
+Completed request:
 
-Key principle: "Transport First, Intelligence Second"
-→ Transport layer complete and verified ✅
-→ Image/attachment handling complete and tested on live Messenger ✅
-→ DEVICES v2 UX Refactor complete and tested ✅
-→ DEVICES flow polish + keyword matrix fix complete ✅
-→ INSTALLATIONS v2 UX Refactor complete and tested ✅
-→ INSTALLATIONS keyword matrix final fix complete, 79/79 PASS ✅
-→ Technician email notification live via Brevo HTTP API ✅
-→ Meta App Review preparation is NEXT (Task [6])
+  processMessage()
+  -> buildTechnicianEmail()
+  -> sendSummaryEmail()
+  -> Brevo HTTP API
+  -> Gmail / technician inbox
 
-Current file structure (MajstorBL_GPT — active project):
+AKiPP target architecture:
 
-src/app.js       — Express app, all route logic, session state,
-                   processMessage(), sendMessengerReply(),
-                   buildTechnicianEmail(), sendSummaryEmail()
-src/server.js    — Only starts the server, imports app from app.js
-package.json     — Project config (no nodemailer — uses native fetch)
-CLAUDE.md        — This file (auto-read by Claude Code)
+  Client
+  -> Channel Transport Adapter
+     - messenger adapter    [LIVE]
+     - web/internal adapter [NEXT -- Task 7b/7c]
+     - future: Viber / WhatsApp / Instagram
+  -> handleIncomingText({ channel, userId, text })
+  -> processMessage(sessionKey, text)
+  -> Channel Transport Adapter reply
+  -> Client
 
-Test files (root of project — keep in repo, never delete):
-test-email-builder.js                  — email builder unit tests, 14 tests
-test-installations-keywords.js         — original regression suite, 39 tests
-test-installations-keywords-v2.js      — Messenger bug regression suite, 14 tests
-test-installations-keywords-master.js  — master keyword matrix suite, 79 tests
-test-devices-flow-polish.js            — DEVICES polish regression suite, 28 tests
-test-continue-answer-quickreply.js     — Quick Reply "Dalje" regression suite, 27 tests
-test-channel-adapter.js                — Channel adapter foundation suite, 11 tests
+Key principles:
+  "Transport First, Intelligence Later."
+  AI layer remains future work -- not the next step.
+  The next practical goal is Web/Internal channel MVP.
+  processMessage() is transport-agnostic and does not know about
+  Messenger payloads or Send API details. It reads/writes the
+  in-memory sessions{} store through the sessionKey -- not a fully
+  pure reducer in the academic sense, but acceptable for MVP.
 
-Entry point: src/server.js  (package.json → "start": "node src/server.js")
+Current file structure (active project folder: MajstorBL_GPT):
+
+  src/app.js        -- Express app, all route logic, session state,
+                       processMessage(), sendMessengerReply(),
+                       buildTechnicianEmail(), sendSummaryEmail(),
+                       buildSessionKey(), handleIncomingText()
+  src/server.js     -- Only starts the server, imports app from app.js
+  package.json      -- Project config (no nodemailer -- uses native fetch)
+  CLAUDE.md         -- This file (auto-read by Claude Code)
+
+Test files (root of project -- keep in repo, never delete):
+  test-email-builder.js                 -- email builder unit tests (14)
+  test-installations-keywords.js        -- original regression suite (39)
+  test-installations-keywords-v2.js     -- Messenger bug regression (14)
+  test-installations-keywords-master.js -- master keyword matrix (79)
+  test-devices-flow-polish.js           -- DEVICES polish suite (28)
+  test-continue-answer-quickreply.js    -- Quick Reply "Dalje" suite (27)
+  test-channel-adapter.js               -- Channel adapter suite (11)
+
+Entry point: src/server.js  (package.json -> "start": "node src/server.js")
 Deployed at: Render.com (auto-deploy from GitHub)
-Live commit:  55f9a73 — "Replace Gmail SMTP with Brevo HTTP Email API"
 
-Git log (recent):
-  55f9a73 Replace Gmail SMTP with Brevo HTTP Email API   ← HEAD
-  90a5cc1 Polish DEVICES flow and add regression suite
-  931284b INSTALLATIONS v2 final keyword matrix fix
+Git log (latest known):
+  7eacabf  Restore Messenger reset after channel adapter  <- latest known HEAD
+  ac8d210  Add channel adapter foundation (Task 7a)
+  55f9a73  Replace Gmail SMTP with Brevo HTTP Email API
+  90a5cc1  Polish DEVICES flow and add regression suite
+  931284b  INSTALLATIONS v2 final keyword matrix fix
 
 ================================================================
-SECTION 4 — CURRENT CODE STATE (src/app.js)
+SECTION 4 -- AKiPP DIRECTION
 ================================================================
 
-CURRENT IMPLEMENTATION STATUS:
+AKiPP -- Automatizacija Komunikacije i Prikupljanja Podataka
+         (Automation of Communication and Data Collection)
+
+Purpose:
+  - Accept messages from different channels
+  - Run the same structured intake conversation flow
+  - Collect service request data
+  - Collect photos where the channel supports it
+  - Collect contact information
+  - Send a clean summary to the business owner / technician
+
+Current channel:
+  Facebook Messenger [LIVE]
+
+Next planned channel:
+  Web/Internal channel MVP
+
+NOT next:
+  - AI layer
+  - WhatsApp
+  - Viber
+  - Instagram
+  - Google Sheets / CRM logging (optional, not prioritised)
+
+Meta App Review status: PAUSED, not abandoned.
+  Reason: Meta account restriction (advertising/business restriction
+  from 2020) and lack of registered business documentation required
+  for Meta Business Verification at this stage.
+  Resume condition: restriction cleared AND/OR business registration
+  available.
+  Privacy Policy draft (privacy-policy.html) is preserved for when
+  this is resumed. Do not delete it.
+
+Messenger bot remains:
+  - active production proof of concept
+  - first and currently only live channel
+  - stable transport that is already working
+  - foundation for the AKiPP multi-channel architecture
+
+================================================================
+SECTION 5 -- CURRENT CODE STATE (src/app.js)
+================================================================
 
 CORE / SHARED:
-- Multi-user sessions (sessions{} keyed by channel-aware key) ✅
-  As of Task [7a], sessions are keyed by "channel:userId", NOT raw userId:
-    messenger:<senderId>   — all Messenger text AND photo attachments
-    test:<userId>          — GET /next and GET /reset (browser testing)
-  This prevents session key collisions across future channels (a Messenger
-  user "12345" and a future Web/Viber user "12345" get separate sessions).
-  NOTE: switching Messenger from raw senderId to "messenger:<senderId>" resets
-  active in-memory Messenger sessions on the next deploy. This is harmless —
-  sessions already live only in memory and reset on every Render restart/deploy.
-- buildSessionKey(channel, userId) — pure helper, returns "channel:userId" ✅
-  (Task [7a]). No side effects. Exported via module.exports for testing.
-- handleIncomingText({ channel, userId, text }) — channel-agnostic entry ✅
-  (Task [7a]). Builds the channel-aware key via buildSessionKey() and calls
-  the existing processMessage(sessionKey, text), returning the SAME reply
-  string. Used by POST /webhook (channel "messenger") and GET /next
-  (channel "test"). No behavior change — pure structural groundwork for AKiPP
-  multi-channel support. Exported via module.exports for testing.
-- normalizeText() — trims, lowercases, null-safe ✅
-- isContinueAnswer(text) — Android Messenger Quick Reply continue/skip
-  detector ✅ (Task [6g]). Normalizes input, strips emoji/symbol/
-  punctuation noise (keeps letters/numbers/spaces, incl. č/ć/đ/š/ž),
-  returns true only when the cleaned text equals "dalje". Accepts plain
-  "Dalje" AND decorated forms like "➡️ Dalje" that the Android Messenger
-  app sends back as the Quick Reply title. Used at ASK_PHOTOS,
-  ASK_LOCATION and ASK_NAME skip points. Exported via module.exports
-  for the regression unit test. No Unicode property escapes — safe on
-  current Node runtime.
-- Empty input blocked (except START and END states) ✅
-- createSession() — initializes fresh session per user ✅
-  Now includes summaryNotes: [] and emailSent: false (added Task [5]).
-- classifyBranch() — keyword-based branch detection ✅
-  Contains two DEVICES priority guards:
-  (a) appliance phrase + fault phrase (osigurač case) — runs FIRST
-  (b) [4d-UX] device fault guard (ne radi, ne pali, etc.) — runs AFTER
-      installation-intent pre-check, so explicit install verbs still win.
-  KNOWN TECHNICAL DEBT: generic keywords "aparat" and "uređaj" may
-  cause false DEVICES classification. Low priority — future cleanup.
-- handleAskService() — shared START + ASK_SERVICE routing ✅
-  Detects greeting-only messages and contact-intent phrases.
+
+- buildSessionKey(channel, userId) [7a]
+  Pure helper. Returns "channel:userId" (e.g. "messenger:12345",
+  "test:user1"). No side effects. Exported via module.exports.
+
+- handleIncomingText({ channel, userId, text }) [7a]
+  Channel-agnostic entry wrapper. Builds the session key via
+  buildSessionKey() and calls processMessage(sessionKey, text),
+  returning the same reply string. Used by POST /webhook (channel
+  "messenger") and GET /next (channel "test"). No behavior change.
+  Exported via module.exports.
+
+- Sessions keyed as "channel:userId" [7a]:
+    messenger:<senderId>  -- Messenger text AND photo attachments
+    test:<userId>         -- GET /next and GET /reset (browser testing)
+  NOTE: switching Messenger key from raw senderId to
+  "messenger:<senderId>" resets active in-memory sessions on next
+  deploy. Harmless -- sessions are in-memory only and reset on every
+  Render restart/deploy.
+
+- /reset behavior [7a-hotfix]:
+    /reset?userId=<id>                    -> resets test:<id> AND
+                                             messenger:<id>
+    /reset?userId=<id>&channel=test       -> resets only test:<id>
+    /reset?userId=<id>&channel=messenger  -> resets only messenger:<id>
+  Restores manual Messenger smoke-testing after channel adapter
+  introduced "channel:userId" keys.
+
+- multi-user sessions (sessions{})
+- normalizeText() -- trims, lowercases, null-safe
+- isContinueAnswer(text) [6g]
+  Normalizes text, strips emoji/symbol/punctuation, returns true only
+  when the cleaned text equals "dalje". Accepts "Dalje", "DALJE",
+  "-> Dalje", "dalje.", "dalje!" etc. Used at ASK_PHOTOS,
+  ASK_LOCATION and ASK_NAME. No Unicode property escapes -- safe on
+  current Node runtime. Exported via module.exports.
+- Empty input blocked (except START and END states)
+- createSession() -- initializes fresh session per user
+  Includes summaryNotes: [] and emailSent: false.
+- classifyBranch() -- keyword-based branch detection
+  Two DEVICES priority guards:
+  (a) appliance phrase + fault phrase (osigurac case) -- runs FIRST
+  (b) [4d-UX] device fault guard -- runs AFTER installationIntent
+      pre-check, so explicit install verbs still win.
+  KNOWN TECHNICAL DEBT: generic "aparat" and "uredaj" may cause
+  false DEVICES classification. Low priority -- future cleanup.
+- handleAskService() -- shared START + ASK_SERVICE routing
+  Detects greeting-only and contact-intent phrases.
   Runs out-of-scope checks BEFORE classifyBranch().
-- processMessage() — core state machine, pure function ✅
-  Used by both GET /next (testing) and POST /webhook (Messenger).
-- sendMessengerReply() — sends text via Facebook Send API ✅
-- sendMessengerQuickReply() — sends Quick Reply buttons ✅
+- processMessage(sessionKey, text) -- core state machine
+  Transport-agnostic. Used by GET /next and POST /webhook.
+- sendMessengerReply() -- sends text via Facebook Send API
+- sendMessengerQuickReply() -- sends Quick Reply buttons
   Used ONLY on ASK_PHOTOS step in both branches.
-- Webhook GET /webhook — Meta verification ✅
-- Webhook POST /webhook — Messenger events, attachment handling ✅
+- Webhook GET /webhook -- Meta verification
+- Webhook POST /webhook -- Messenger events + attachment handling
   res.status(200) sent AFTER forEach (prevents proxy close bug).
   Image attachments stored in session.photos[] (max 2).
-  Non-image attachments (video, audio, file) rejected with message.
-  Quick Reply payload treated as plain text input.
+  Non-image attachments rejected with message.
+  Quick Reply payload treated as plain text.
 
-EMAIL NOTIFICATION (Task [5]) ✅ DONE / PRODUCTION VERIFIED:
-- buildTechnicianEmail(session) — pure function, returns {subject, text} ✅
+EMAIL NOTIFICATION (Task [5]) DONE / PRODUCTION VERIFIED:
+
+- buildTechnicianEmail(session) -- pure function, returns {subject, text}
   Exported via module.exports for isolated unit testing.
-  Builds subject: "[NOVI ZAHTJEV] BRANCH — detail — location"
-  Builds body with three sections:
-    --- PODACI O ZAHTJEVU --- (branch-specific fields)
-    --- KONTAKT ---           (phone, location, name)
-    --- FOTOGRAFIJE ---       (count + URL links)
-  Guard for old sessions: Array.isArray(session.summaryNotes) check.
-  Does NOT touch network or session state — safe to call any time.
-- sendSummaryEmail(session) — async, NON-BLOCKING, SAFE, IDEMPOTENT ✅
-  Called without await after finalReply is assembled — never delays UX.
-  Skips silently if BREVO_API_KEY / EMAIL_FROM / EMAIL_TO are missing.
-  Uses Node built-in fetch() — no nodemailer dependency.
+  Subject: "[NOVI ZAHTJEV] BRANCH -- detail -- location"
+  Body: three sections:
+    --- PODACI O ZAHTJEVU ---
+    --- KONTAKT ---
+    --- FOTOGRAFIJE ---
+  Guard: Array.isArray(session.summaryNotes) for old sessions.
+  Does not touch network or session state.
+
+- sendSummaryEmail(session) -- async, NON-BLOCKING, SAFE, IDEMPOTENT
+  Called without await -- never delays user-facing reply.
+  Skips silently if env vars missing.
+  Uses Node built-in fetch().
   POSTs to https://api.brevo.com/v3/smtp/email (HTTPS port 443).
-  Sets session.emailSent = true ONLY after response.ok.
-  Logs success: "Technician email notification sent."
-  Logs failure: "Technician email notification failed: <error>"
-  Never throws — all errors caught locally, never surface to user.
-- Email transport decision: Brevo HTTP API (not Gmail SMTP) ✅
-  SMTP on Render free tier failed with IPv6 ENETUNREACH on ports 465/587.
-  DNS ipv4first workaround still resulted in connection timeout.
-  Brevo HTTP API uses HTTPS 443 — works reliably on Render.
-  Architecture is flexible: transport is isolated in sendSummaryEmail()
-  and can be swapped (SMTP, other API) without touching any flow logic.
+  Sets session.emailSent = true only after response.ok.
+  Never throws -- all errors caught locally, never surface to user.
 
-DEVICES BRANCH (Branch A) — v2 + [4d-UX] polish ✅ DONE / STABLE:
-- extractDeviceType() — auto-detects device from first message ✅
-  Ordering: sudomašina → sušilica → veš mašina (prevents ordering bugs).
-  Covers: frižder/frizder, škrinja/skrinja, sušilica/sušilica veša,
-  printer/štampač, šparet, loptop, indukciona ploča, električna ploča.
-- shouldAskDeviceInstallType(deviceType) ✅  [4d-UX]
-  Returns true ONLY for: sudomašina, veš mašina, sušilica, frižider,
-  zamrzivač, šporet, električna ploča, indukciona ploča, bojler.
-  For računar, laptop, monitor, TV, printer — returns false → skip to photos.
-- devicesPhotoPrompt() ✅  [4d-UX]
-  Aligned with INSTALLATIONS: max 2 photos, video not supported, Dalje.
-- getDeviceInstrumental() — BHS instrumental grammatical forms ✅
-- getModelHint() — device-specific label location hints ✅
-- Model "nepoznat" fallback when user doesn't know model ✅
-- phoneRefusedOnce flag — one retry before session closes ✅
-- Room/location question REMOVED from DEVICES flow ✅  [4d-UX]
-- DEVICES address prompt: "adresa ili naselje gdje bi serviser trebao doći" ✅
-- DEVICES summary: installType shown only when present (no null display) ✅
+- Email transport: Brevo HTTP API
+  SMTP abandoned: IPv6 ENETUNREACH on Render ports 465/587.
+  DNS ipv4first workaround still timed out.
+  Brevo HTTP API over HTTPS 443 reliable on Render.
+  Transport isolated in sendSummaryEmail() -- swappable without
+  touching flow logic.
 
-DEVICES v2 state machine (STABLE — do NOT change):
-  START → ASK_SERVICE (via handleAskService)
-       → (auto-detect device OR ASK_DEVICE_TYPE)
-       → ASK_BRAND → ASK_MODEL → ASK_DESCRIPTION
-       → ASK_FAULT_PATTERN
-       → (ASK_INSTALL_TYPE only if shouldAskDeviceInstallType() = true)
-       → ASK_PHOTOS
-       → ASK_CONFIRMATION → ASK_PHONE → ASK_LOCATION
-       → ASK_NAME → END + summary + sendSummaryEmail()
+DEVICES BRANCH (Branch A) -- v2 + [4d-UX] polish DONE / STABLE:
 
-INSTALLATIONS BRANCH (Branch B) — v2 ✅ DONE / STABLE:
+- extractDeviceType() -- auto-detects device from first message
+  Ordering: sudomasina -> susilica -> ves masina (prevents order bugs).
+  Covers frizder/frizider, skrinja, susilica/susilica vesa,
+  printer/stampac, sparet, loptop, indukciona ploca, elektricna ploca.
+- shouldAskDeviceInstallType(deviceType) [4d-UX]
+  Returns true ONLY for: sudomasina, ves masina, susilica, frizider,
+  zamrzivac, sporet, elektricna ploca, indukciona ploca, bojler.
+  For racunar, laptop, monitor, TV, printer -- returns false.
+- devicesPhotoPrompt() [4d-UX]
+- getDeviceInstrumental() -- BHS instrumental forms
+- getModelHint() -- device-specific label location hints
+- model "nepoznat" fallback
+- phoneRefusedOnce flag -- one retry before session closes
+- Room/location question REMOVED from DEVICES flow [4d-UX]
+- DEVICES summary: installType shown only when present
+
+DEVICES v2 state machine (STABLE -- do NOT change without instruction):
+  START -> ASK_SERVICE (via handleAskService)
+        -> (auto-detect device OR ASK_DEVICE_TYPE)
+        -> ASK_BRAND -> ASK_MODEL -> ASK_DESCRIPTION
+        -> ASK_FAULT_PATTERN
+        -> (ASK_INSTALL_TYPE only if shouldAskDeviceInstallType() true)
+        -> ASK_PHOTOS
+        -> ASK_CONFIRMATION -> ASK_PHONE -> ASK_LOCATION
+        -> ASK_NAME -> END + summary + sendSummaryEmail()
+
+INSTALLATIONS BRANCH (Branch B) -- v2 DONE / STABLE:
 
 Helper functions (all implemented and tested):
-- extractInstallationType() — detects B1/B2/B3/B4 sub-category ✅
-- extractInstallationItem() — detects canonical item name ✅
-- detectMountingMode() — wall/ceiling/freestanding/unknown ✅
-- detectOutOfScopePlumbing() — nuanced, NOT a blunt trigger ✅
-  Local endpoint context guard preserves B3 for "začepljen sifon ispod lavaboa".
-- detectOutOfScopeElectrical() — nuanced, NOT a blunt trigger ✅
-  Local endpoint faults stay B2; in-wall rewiring → out-of-scope.
-- detectDemolition() — broad backwards-compatible detector ✅
-- detectDemolitionRequested() — nuanced demolition detector ✅
-  Regex-based BHS word-order handling. Guards against already-done false positives.
-- detectAlreadyRemovedOrReady() — already-done protection ✅
-- addBhsNote(session, bhsText) — clean BHS-only summary notes ✅
-  Deduplicates. NEVER store English debug strings in summaryNotes.
-- sessionHasDemolitionRequestNote() — checks summaryNotes[] ✅
-- isNegativeWorkReadyAnswer() — triggers ASK_DEMOLITION_FOLLOWUP ✅
-- shouldAskStandaloneOrBuiltIn() — B4 device type question ✅
-- buildAccessQuestionForInstallations() — item-specific wording ✅
-- continueInstallationsFlow(session, fromState) — central dispatcher ✅
-- nextAfterRecognitionInstallations(session) — initial router ✅
-  Skips ASK_WORK_READY if demolition already noted.
-- installationsPhotoPrompt() — standard photo step message ✅
-- ASK_HAS_PART intentionally DISABLED in active v2 flow ✅
+  - extractInstallationType() -- detects B1/B2/B3/B4 sub-category
+  - extractInstallationItem() -- detects canonical item name
+  - detectMountingMode() -- wall/ceiling/freestanding/unknown
+  - detectOutOfScopePlumbing() -- nuanced, local endpoint guard
+  - detectOutOfScopeElectrical() -- nuanced, local endpoint guard
+  - detectDemolition() -- broad backwards-compatible detector
+  - detectDemolitionRequested() -- nuanced, regex BHS word-order
+  - detectAlreadyRemovedOrReady() -- false demolition tag protection
+  - addBhsNote(session, bhsText) -- clean BHS-only summary notes
+    Deduplicates. NEVER store English debug strings in summaryNotes.
+  - sessionHasDemolitionRequestNote()
+  - isNegativeWorkReadyAnswer() -- triggers ASK_DEMOLITION_FOLLOWUP
+  - shouldAskStandaloneOrBuiltIn() -- B4 device type question
+  - buildAccessQuestionForInstallations() -- item-specific wording
+  - continueInstallationsFlow(session, fromState) -- central dispatcher
+  - nextAfterRecognitionInstallations(session) -- initial router
+  - installationsPhotoPrompt()
+  - ASK_HAS_PART intentionally DISABLED in active v2 flow
 
-INSTALLATIONS v2 state machine (STABLE — do NOT change):
-  START → ASK_SERVICE (via handleAskService)
-       → (auto-detect type+item OR ASK_INSTALLATION_TYPE)
-       → (ASK_ITEM_NAME if B1/B4 and item unknown)
+INSTALLATIONS v2 state machine (STABLE -- do NOT change without instruction):
+  START -> ASK_SERVICE (via handleAskService)
+        -> (auto-detect type+item OR ASK_INSTALLATION_TYPE)
+        -> (ASK_ITEM_NAME if B1/B4 and item unknown)
 
   B1 path:
-       → (skip ASK_WORK_READY if demolition already noted)
-       → ASK_WORK_READY → (ASK_DEMOLITION_FOLLOWUP if "ne")
-       → (ASK_WALL_TYPE if mountingMode=wall/ceiling)
-       → ASK_DIMENSIONS → ASK_PHOTOS
+        -> (skip ASK_WORK_READY if demolition already noted)
+        -> ASK_WORK_READY -> (ASK_DEMOLITION_FOLLOWUP if "ne")
+        -> (ASK_WALL_TYPE if mountingMode=wall/ceiling)
+        -> ASK_DIMENSIONS -> ASK_PHOTOS
 
   B2/B3 path:
-       → ASK_PROBLEM_DESCRIPTION → ASK_ACCESS → ASK_PHOTOS
+        -> ASK_PROBLEM_DESCRIPTION -> ASK_ACCESS -> ASK_PHOTOS
 
   B4 path:
-       → (skip ASK_WORK_READY if demolition already noted)
-       → ASK_WORK_READY → (ASK_DEMOLITION_FOLLOWUP if "ne")
-       → (ASK_STANDALONE_OR_BUILTIN if relevant device)
-       → ASK_ACCESS
-       → (ASK_WALL_TYPE if mountingMode=wall/ceiling)
-       → ASK_BRAND → ASK_MODEL
-       → (ASK_DIMENSIONS if wall-mounted)
-       → ASK_PHOTOS
+        -> (skip ASK_WORK_READY if demolition already noted)
+        -> ASK_WORK_READY -> (ASK_DEMOLITION_FOLLOWUP if "ne")
+        -> (ASK_STANDALONE_OR_BUILTIN if relevant device)
+        -> ASK_ACCESS
+        -> (ASK_WALL_TYPE if mountingMode=wall/ceiling)
+        -> ASK_BRAND -> ASK_MODEL
+        -> (ASK_DIMENSIONS if wall-mounted)
+        -> ASK_PHOTOS
 
   All paths converge:
-       → ASK_CONFIRMATION → ASK_PHONE → ASK_LOCATION
-       → ASK_NAME → END + summary + sendSummaryEmail()
+        -> ASK_CONFIRMATION -> ASK_PHONE -> ASK_LOCATION
+        -> ASK_NAME -> END + summary + sendSummaryEmail()
 
 SESSION MODEL (current createSession()):
   state, branch, service
@@ -282,28 +361,33 @@ SESSION MODEL (current createSession()):
   wallType, accessInfo, workReady, dimensions, floorInfo, parkingInfo
   // Shared
   brand, model, description, location, photos[], notes[], contact
-  summaryNotes[]   ← clean BHS notes, initialized in createSession() ✅
-  emailSent: false ← prevents duplicate email sends, set in createSession() ✅
-  // contact: legacy field — retained for compatibility, unused in v2
+  summaryNotes[]   -- clean BHS notes for summary/email
+  emailSent: false -- prevents duplicate email sends
+  // contact: legacy field -- retained for compatibility, unused in v2
 
 ================================================================
-SECTION 4a — QA / REGRESSION SUITES
+SECTION 6 -- QA / REGRESSION SUITES
 ================================================================
 
-All five test files live in the project root (not in src/).
-Run with server active in one terminal, test in second terminal.
-Exception: test-email-builder.js is a unit test — no server needed.
+All test files live in the project root (not in src/).
+Exception: test-email-builder.js and test-channel-adapter.js are
+pure unit tests -- no server needed.
+All other test files require the server running in a second terminal.
 
-test-email-builder.js                  — 14 tests  — 14/14 PASS ✅
-test-installations-keywords.js         — 39 tests  — 39/39 PASS ✅
-test-installations-keywords-v2.js      — 14 tests  — 14/14 PASS ✅
-test-installations-keywords-master.js  — 79 tests  — 79/79 PASS ✅
-test-devices-flow-polish.js            — 28 tests  — 28/28 PASS ✅
-test-continue-answer-quickreply.js     — 27 tests  — 27/27 PASS ✅
-test-channel-adapter.js                — 11 tests  — 11/11 PASS ✅
-TOTAL:                                  212 tests  — 212/212 PASS ✅
+  test-email-builder.js                 -- 14 tests -- 14/14 PASS
+  test-installations-keywords.js        -- 39 tests -- 39/39 PASS
+  test-installations-keywords-v2.js     -- 14 tests -- 14/14 PASS
+  test-installations-keywords-master.js -- 79 tests -- 79/79 PASS
+  test-devices-flow-polish.js           -- 28 tests -- 28/28 PASS
+  test-continue-answer-quickreply.js    -- 27 tests -- 27/27 PASS
+  test-channel-adapter.js               -- 11 tests -- 11/11 PASS
+  TOTAL:                                   212 tests -- 212/212 PASS
 
-MANDATORY — run ALL before any commit:
+test-continue-answer-quickreply.js has two parts:
+  Part A -- unit tests isContinueAnswer() without server
+  Part B -- HTTP flow tests that require the server
+
+MANDATORY -- run ALL before any commit:
   node --check src/app.js
   node test-email-builder.js
   node test-installations-keywords.js
@@ -313,374 +397,336 @@ MANDATORY — run ALL before any commit:
   node test-continue-answer-quickreply.js
   node test-channel-adapter.js
 
-Note: test-email-builder.js tests buildTechnicianEmail() in isolation.
-No server needed — it is a pure function unit test.
-test-channel-adapter.js is also a pure in-memory test (NO server needed) —
-it tests buildSessionKey() and handleIncomingText() session continuity and
-channel isolation directly via module.exports.
-test-continue-answer-quickreply.js has two parts: Part A unit-tests
-isContinueAnswer() with NO server; Part B runs HTTP flow tests that
-require the server. Run it with the server active to exercise both parts.
-All other test files require the server running in a second terminal.
-
-Do NOT delete any test files. They are the safety net — regressions
-will be invisible without them.
+Do NOT delete any test files. They are the regression safety net.
 
 ================================================================
-SECTION 4b — API DESIGN
+SECTION 7 -- API / ENDPOINTS
 ================================================================
 
-GET  /webhook                      — Meta webhook verification
-POST /webhook                      — Messenger events + reply
-GET  /next?userId=...&tekst=...    — browser testing endpoint
-GET  /reset?userId=...             — resets session for specific user
-GET  /reset?userId=...&channel=... — resets only that channel's session
+  GET  /webhook                        -- Meta webhook verification
+  POST /webhook                        -- Messenger events + reply
+  GET  /next?userId=...&tekst=...      -- browser testing endpoint
+  GET  /reset?userId=...               -- resets test + messenger sessions
+  GET  /reset?userId=...&channel=...   -- resets only that channel session
 
 GET /next and GET /reset are temporary testing endpoints.
 Core production flow runs through POST /webhook only.
 
-[7a-hotfix] GET /reset behavior with channel-aware session keys:
-  /reset?userId=<id>                    → resets BOTH test:<id> and messenger:<id>
-  /reset?userId=<id>&channel=test       → resets only test:<id>
-  /reset?userId=<id>&channel=messenger  → resets only messenger:<id>
-After [7a] introduced "channel:userId" keys, a plain /reset only cleared
-test:<id>, so a Messenger session ("messenger:<senderId>") could stay stuck.
-The default reset now clears both, restoring manual Messenger smoke testing
-while GET /next keeps using the test:<userId> session.
-
-module.exports exposes five additional symbols for testing:
-  module.exports.buildTechnicianEmail  — pure function, safe to import
-  module.exports.createSession         — session factory, safe to import
-  module.exports.isContinueAnswer      — Quick Reply "Dalje" detector ([6g])
-  module.exports.buildSessionKey       — channel-aware session key helper ([7a])
-  module.exports.handleIncomingText    — channel-agnostic entry wrapper ([7a])
+module.exports exposes for testing:
+  module.exports.buildTechnicianEmail  -- pure function
+  module.exports.createSession         -- session factory
+  module.exports.isContinueAnswer      -- Quick Reply "Dalje" detector
+  module.exports.buildSessionKey       -- channel-aware session key
+  module.exports.handleIncomingText    -- channel-agnostic entry wrapper
 
 ================================================================
-SECTION 5 — TOP-LEVEL ROUTING
+SECTION 8 -- TOP-LEVEL ROUTING
 ================================================================
 
 On the first client message, handleAskService() classifies:
 
-[BRANCH A] DEVICES — repair and maintenance of electrical appliances
-[BRANCH B] INSTALLATIONS — assembly, electrical, plumbing, device install
-[OUT-OF-SCOPE] — polite decline, session ends
+  [BRANCH A] DEVICES      -- repair and maintenance of electrical appliances
+  [BRANCH B] INSTALLATIONS -- assembly, electrical, plumbing, device install
+  [OUT-OF-SCOPE]           -- polite decline, session ends
 
 ROUTING ORDER in handleAskService():
-  1. Greeting / contact-intent check → ask "Kako Vam možemo pomoći?"
-  2. detectOutOfScopePlumbing() → decline + END
-  3. detectOutOfScopeElectrical() → decline + END
-  4. classifyBranch() → DEVICES / INSTALLATIONS / UNKNOWN
-  5. DEVICES: extractDeviceType() → route to flow
-  6. INSTALLATIONS: detectDemolitionRequested() → addBhsNote()
-                    extractInstallationType() → set installationType
-                    extractInstallationItem() → set itemName + mountingMode
-                    → nextAfterRecognitionInstallations()
+  1. Greeting / contact-intent check -> "Kako Vam mozemo pomoci?"
+  2. detectOutOfScopePlumbing()       -> decline + END
+  3. detectOutOfScopeElectrical()     -> decline + END
+  4. classifyBranch()                 -> DEVICES / INSTALLATIONS / UNKNOWN
+  5. DEVICES: extractDeviceType()     -> route to flow
+  6. INSTALLATIONS: detectDemolitionRequested() -> addBhsNote()
+                    extractInstallationType()   -> set installationType
+                    extractInstallationItem()   -> set itemName + mountingMode
+                    -> nextAfterRecognitionInstallations()
 
 DEVICES priority guards in classifyBranch() (two guards, in order):
-  Guard 1: appliance phrase + fault phrase (e.g. "veš mašina izbacuje osigurač")
-    → forced DEVICES BEFORE installationIntent pre-check.
+  Guard 1: appliance phrase + fault phrase (e.g. osigurac case)
+           -> forced DEVICES BEFORE installationIntent pre-check.
   Guard 2: [4d-UX] device fault guard (device phrase + fault symptom)
-    → runs AFTER installationIntent pre-check so install verbs still win.
-  Pure electrical fault (no appliance) → INSTALLATIONS (B2).
+           -> runs AFTER installationIntent pre-check; install verbs still win.
+  Pure electrical fault (no appliance) -> INSTALLATIONS (B2).
 
 ================================================================
-SECTION 6 — BRANCH A: DEVICES
+SECTION 9 -- BRANCH A: DEVICES
 ================================================================
 
 Scope: white goods, boilers, electronics, computers, small appliances.
-TERMINOLOGY: always "serviser" or "tehničar" — NEVER "majstor".
+TERMINOLOGY: always "serviser" or "tehnicar" -- NEVER "majstor".
 
 DATA COLLECTION (in order):
-  1. Device type — auto-detected or ASK_DEVICE_TYPE
-  2. Brand — ASK_BRAND
-  3. Model — ASK_MODEL (device-specific label hint, "nepoznat" fallback)
-  4. Fault description — ASK_DESCRIPTION
-  5. Fault pattern (constant/intermittent) — ASK_FAULT_PATTERN
-  6. Install type (built-in/freestanding) — ASK_INSTALL_TYPE
-     ONLY if shouldAskDeviceInstallType() returns true.
-  7. Photos (optional, Quick Reply, max 2) — ASK_PHOTOS
-  8. Confirmation — ASK_CONFIRMATION
-  9. Phone (mandatory, one retry) — ASK_PHONE
-  10. Address/neighborhood (optional) — ASK_LOCATION
-  11. Name (optional) — ASK_NAME → END + summary + email to technician
+   1. Device type -- auto-detected or ASK_DEVICE_TYPE
+   2. Brand -- ASK_BRAND
+   3. Model -- ASK_MODEL (device hint, "nepoznat" fallback)
+   4. Fault description -- ASK_DESCRIPTION
+   5. Fault pattern (constant/intermittent) -- ASK_FAULT_PATTERN
+   6. Install type -- ASK_INSTALL_TYPE
+      Only if shouldAskDeviceInstallType() = true.
+   7. Photos (optional, Quick Reply, max 2) -- ASK_PHOTOS
+   8. Confirmation -- ASK_CONFIRMATION
+   9. Phone (mandatory, one retry) -- ASK_PHONE
+  10. Address/neighborhood (optional) -- ASK_LOCATION
+  11. Name (optional) -- ASK_NAME -> END + summary + email
 
 ================================================================
-SECTION 7 — BRANCH B: INSTALLATIONS
+SECTION 10 -- BRANCH B: INSTALLATIONS
 ================================================================
 
 Sub-categories:
-  B1 — Furniture assembly/disassembly, wall-mount items
-  B2 — Minor electrical: outlets, switches, lighting, fuses
-  B3 — Minor plumbing: faucets, siphons, valves, hoses, vodokotlići,
-       WC šolje, bidet, tuš kada, tuš baterija, tuš kabina, lavabo
-  B4 — Device installation: boiler, šporet, ploča, napa, mašina,
-       sudomašina, klima, zamrzivač, frižider
+  B1 -- Furniture assembly/disassembly, wall-mount items
+  B2 -- Minor electrical: outlets, switches, lighting, fuses
+  B3 -- Minor plumbing: faucets, siphons, valves, hoses, vodokotlici,
+        WC solje, bidet, tus kada, tus baterija, tus kabina, lavabo
+  B4 -- Device installation: boiler, sporet, ploca, napa, masina,
+        sudomasina, klima, zamrzivac, frizider
 
-TERMINOLOGY: always "majstor" — NEVER "serviser" or "tehničar".
+TERMINOLOGY: always "majstor" -- NEVER "serviser" or "tehnicar".
 
 KEY DISTINCTION DEVICES vs INSTALLATIONS:
-  "ne radi / kvar / popravka / greška" → DEVICES
-  "ugradnja / montaža / zamjena / priključenje / kupio sam" → INSTALLATIONS
-
-After completing the contact block, both branches call sendSummaryEmail()
-non-blocking — the email goes out without the user ever waiting for it.
+  "ne radi / kvar / popravka / greska"               -> DEVICES
+  "ugradnja / montaza / zamjena / prikljucenje / kupio sam" -> INSTALLATIONS
 
 ================================================================
-SECTION 8 — SESSION TERMINATION RULES
+SECTION 11 -- SESSION TERMINATION RULES
 ================================================================
 
 T1. Request outside scope of services.
 T2. Client seeks DIY repair advice.
-T3. Client refuses phone number (after one retry with explanation).
+T3. Client refuses phone number after one retry with explanation.
 T4. Client requests direct call at START:
-    → Thank, say technician/majstor will call.
-    → Collect phone only + preferred app (Viber/Messenger/WhatsApp).
-    → End session.
+    CURRENT STATUS: not implemented as a separate phone-only flow.
+    Current behavior: contact-intent messages are treated as a
+    greeting/help intent.
+    Future option: collect phone + preferred app and end session,
+    but only if explicitly implemented in a future task.
 T5. Client answers negatively to ASK_CONFIRMATION:
-    → "U redu. Hvala Vam što ste nas kontaktirali."
-    → End session. (No email sent — no contact data collected yet.)
+    -> "U redu. Hvala Vam sto ste nas kontaktirali."
+    -> End session. (No email sent.)
 
 ================================================================
-SECTION 9 — STRICT OPERATIONAL RULES
+SECTION 12 -- STRICT OPERATIONAL RULES
 ================================================================
 
-RULE 1 — NO DIY ADVICE
-RULE 2 — FREE TEXT ONLY (exception: Quick Reply "Dalje" on ASK_PHOTOS)
-RULE 3 — PHOTOS ONLY, MAX 2 — never request/accept video
-RULE 4 — NO PRICING — "Cijena se određuje tek nakon izlaska na teren."
-RULE 5 — NO APPOINTMENT SCHEDULING
-RULE 6 — ON-SITE SERVICE ONLY
-RULE 7 — NO "ZABILJEŽENO" PATTERN — confirmations must be natural
-RULE 8 — TERMINOLOGY — DEVICES: serviser/tehničar; INSTALLATIONS: majstor
-RULE 9 — NO REPEATED QUESTIONS
-RULE 10 — SKIP KNOWN DATA — use what the first message already gave
-RULE 11 — CLEAN SUMMARY NOTES — summaryNotes[] BHS only, no English labels
+RULE 1  -- NO DIY ADVICE
+RULE 2  -- FREE TEXT ONLY (exception: Quick Reply "Dalje" on ASK_PHOTOS)
+RULE 3  -- PHOTOS ONLY, MAX 2 -- never request/accept video
+RULE 4  -- NO PRICING
+          "Cijena se odredjuje tek nakon izlaska na teren."
+RULE 5  -- NO APPOINTMENT SCHEDULING
+RULE 6  -- ON-SITE SERVICE ONLY
+RULE 7  -- NO "ZABILJEZENО" PATTERN -- confirmations must be natural
+RULE 8  -- TERMINOLOGY
+          DEVICES: serviser/tehnicar; INSTALLATIONS: majstor
+RULE 9  -- NO REPEATED QUESTIONS
+RULE 10 -- SKIP KNOWN DATA -- use what the first message already gave
+RULE 11 -- CLEAN SUMMARY NOTES
+          summaryNotes[] BHS only -- never English debug labels
 
 ================================================================
-SECTION 10 — TECH STACK
+SECTION 13 -- TECH STACK
 ================================================================
 
-Runtime:      Node.js
-Framework:    Express.js
-HTTP client:  Node.js built-in https (for Facebook Send API)
-              Node.js built-in fetch() (for Brevo Email API) ✅ Task [5]
-Dev tool:     Nodemon
-Version ctrl: Git (local) + GitHub (remote)
-Hosting:      Render.com (auto-deploy from GitHub) ✅ LIVE
-Email:        Brevo HTTP API (POST https://api.brevo.com/v3/smtp/email) ✅
-              nodemailer was tried and ABANDONED — SMTP unreliable on Render
-              (IPv6 ENETUNREACH on ports 465/587, timeout on STARTTLS/IPv4fix)
-AI layer:     Provider-agnostic adapter pattern (NOT YET implemented)
-                Dev/test:    Google Gemini Flash (free tier)
-                Production:  Gemini / Claude / GPT — TBD
-                Switch = change ONE file only.
-Future DB:    Google Sheets for lead logging (optional)
-Bot channel:  Facebook Messenger (Meta Messenger API) ✅ LIVE
-Language:     BHS for all client-facing communication
-              English for code, docs, and AI prompts
+Runtime:       Node.js
+Framework:     Express.js
+HTTP (FB):     Node.js built-in https (Facebook Send API)
+HTTP (email):  Node.js built-in fetch() (Brevo Email API)
+Dev tool:      Nodemon
+Version ctrl:  Git (local) + GitHub (remote)
+Hosting:       Render.com (auto-deploy from GitHub) LIVE
+Email:         Brevo HTTP API
+               (POST https://api.brevo.com/v3/smtp/email)
+               nodemailer: ABANDONED -- SMTP unreliable on Render
+               (IPv6 ENETUNREACH on ports 465/587;
+                STARTTLS/IPv4fix also timed out)
+AI layer:      NOT YET IMPLEMENTED
+               Provider-agnostic adapter pattern designed, not built.
+               Dev/test:   Google Gemini Flash (free tier)
+               Production: Gemini / Claude / GPT -- TBD
+               Target design goal: future provider switch should be
+               isolated behind one adapter boundary.
+Future DB:     Google Sheets lead logging (optional -- not prioritised)
+Bot channel:   Facebook Messenger (Meta Messenger API) LIVE
+Language:      BHS for all client-facing communication
+               English for code, docs, and AI prompts
 
-Environment variables (Render dashboard — current active set):
-  META_VERIFY_TOKEN   — webhook verification token ✅
-  PAGE_ACCESS_TOKEN   — Meta page token for Send API ✅
-  BREVO_API_KEY       — Brevo email API key ✅ (added Task [5])
-  EMAIL_FROM          — sender address (majstor.banjaluka@gmail.com) ✅
-  EMAIL_TO            — technician's address (majstor.banjaluka@gmail.com) ✅
-  EMAIL_FROM_NAME     — sender display name ("Majstor Banjaluka") ✅
+Environment variables (Render dashboard -- current active set):
+  META_VERIFY_TOKEN  -- webhook verification token
+  PAGE_ACCESS_TOKEN  -- Meta page token for Send API
+  BREVO_API_KEY      -- Brevo email API key
+  EMAIL_FROM         -- sender address (majstor.banjaluka@gmail.com)
+  EMAIL_TO           -- technician's address
+  EMAIL_FROM_NAME    -- sender display name ("Majstor Banjaluka")
 
-OBSOLETE env vars — delete from Render if still present:
-  EMAIL_USER          — was for Gmail SMTP, no longer used
-  EMAIL_PASS          — was for Gmail SMTP App Password, no longer used
+OBSOLETE env vars -- delete from Render if still present:
+  EMAIL_USER  -- was for Gmail SMTP, no longer used
+  EMAIL_PASS  -- was for Gmail SMTP App Password, no longer used
 
 ================================================================
-SECTION 11 — DEVELOPMENT DECISIONS
+SECTION 14 -- DEVELOPMENT DECISIONS
 ================================================================
 
-1.  NO ngrok — all webhook testing done after deploy to Render
-2.  Render over Railway — better uptime for webhook reliability
-3.  Deployment: local edit → Ctrl+S → git add → git commit → git push
-    → Render auto-deploy (always verify deploy is live before Messenger test)
-4.  ALWAYS Ctrl+S before git add/commit/push
-5.  Free-text only, ONE exception: Quick Reply on photo step
-6.  AI role: classify intent + extract data from natural language
-7.  "Transport First, Intelligence Second" — transport complete ✅
-8.  All secrets in env vars — never hardcoded
-9.  processMessage() is a pure function — used by /next and /webhook
-10. sendMessengerReply() uses native https — no axios dependency
+ 1. NO ngrok -- all webhook testing done after deploy to Render
+ 2. Render over Railway -- better uptime for webhook reliability
+ 3. Deployment: local -> Ctrl+S -> git add -> git commit -> git push
+    -> Render auto-deploy. Always verify deploy is live before test.
+ 4. ALWAYS Ctrl+S before git add/commit/push
+ 5. Free-text only; ONE exception: Quick Reply on photo step
+ 6. Future AI role: classify intent + extract data from natural language.
+    AI layer is NOT implemented and is NOT the next step.
+ 7. "Transport First, Intelligence Later" -- transport complete
+ 8. All secrets in env vars -- never hardcoded
+ 9. processMessage() is transport-agnostic -- used by /next and /webhook
+10. sendMessengerReply() uses native https -- no axios dependency
 11. res.status(200) sent AFTER forEach in POST /webhook handler
-12. Meta App Review required for public users
-13. Phone → location → name in contact block (all optional except phone)
+12. Meta App Review required for public users -- PAUSED for now
+13. Contact block: phone -> location -> name (only phone mandatory)
 14. mountingMode drives conditional ASK_WALL_TYPE
-15. itemReady field (B4): if false → skip ASK_BRAND/MODEL
+15. itemReady field (B4): if false -> skip ASK_BRAND/MODEL
 16. Greeting detection in handleAskService()
 17. summaryNotes[] clean BHS notes; notes[] internal debug only
-18. extractDeviceType() ordering: sudomašina → sušilica → veš mašina
+18. extractDeviceType() ordering: sudomasina -> susilica -> ves masina
 19. handleAskService() extracted for shared START + ASK_SERVICE logic
-20. getDeviceInstrumental() — BHS grammatical forms
-21. getModelHint() — device-specific label hints
+20. getDeviceInstrumental() -- BHS grammatical forms
+21. getModelHint() -- device-specific label hints
 22. model "nepoznat" fallback
-23. phoneRefusedOnce flag — one retry
-24. DEVICES priority guard 1 — appliance + osigurač fault
+23. phoneRefusedOnce flag -- one retry
+24. DEVICES priority guard 1 -- appliance + osigurac fault
 25. Out-of-scope detectors BEFORE classifyBranch()
-26. detectDemolitionRequested() — nuanced, regex BHS word-order
-27. detectAlreadyRemovedOrReady() — false demolition tag protection
-28. addBhsNote() + summaryNotes[] — clean BHS architecture
+26. detectDemolitionRequested() -- nuanced, regex BHS word-order
+27. detectAlreadyRemovedOrReady() -- false demolition tag protection
+28. addBhsNote() + summaryNotes[] -- clean BHS architecture
 29. nextAfterRecognitionInstallations() skips ASK_WORK_READY when noted
-30. continueInstallationsFlow() — single INSTALLATIONS dispatcher
-31. ASK_HAS_PART disabled in v2 (UX friction, state kept for v3)
-32. TV nosač = B1, not B2
-33. "kada" not in keywords — BHS false positive ("when")
-34. "pipa" = B3 keyword (colloquial BiH/RS for česma)
+30. continueInstallationsFlow() -- single INSTALLATIONS dispatcher
+31. ASK_HAS_PART disabled in v2 (UX friction; state kept for v3)
+32. TV nosac = B1, not B2
+33. "kada" not in keywords -- BHS false positive ("when")
+34. "pipa" = B3 keyword (colloquial BiH/RS for cesma)
 35. Master regression suite before any keyword commit
-36. shouldAskDeviceInstallType() — selective built-in/freestanding question
-37. devicesPhotoPrompt() — aligned DEVICES photo prompt
-38. DEVICES fault guard 2 — device phrase + fault phrase → DEVICES
+36. shouldAskDeviceInstallType() -- selective built-in/freestanding
+37. devicesPhotoPrompt() -- aligned DEVICES photo prompt
+38. DEVICES fault guard 2 -- device phrase + fault phrase -> DEVICES
 39. Room question removed from DEVICES flow
-40. DEVICES summary: no null installType, label "Tip uređaja"
-41. EMAIL BEFORE AI LAYER — strategic decision: bot must deliver leads
-    before adding AI complexity. Confirmed and executed as Task [5].
-42. summaryNotes[] and emailSent initialized in createSession() ✅ Task [5]
-43. Email transport = Brevo HTTP API, not Gmail SMTP ✅ Task [5]
-    Gmail SMTP failed on Render (IPv6 ENETUNREACH ports 465/587).
-    DNS ipv4first workaround still timed out.
-    Brevo HTTP API over HTTPS 443 works reliably on Render.
-    Transport is isolated in sendSummaryEmail() — can be swapped later.
-44. sendSummaryEmail() is non-blocking (no await at call site) ✅ Task [5]
-    Fire-and-forget: user gets Messenger reply immediately regardless.
-45. buildTechnicianEmail() is a pure function exported for unit testing ✅
-    module.exports.buildTechnicianEmail allows test-email-builder.js to
-    import and test it in isolation without starting the server.
-46. emailSent = true only after response.ok — failed sends can retry ✅
-    (retry happens if same user completes another flow — unlikely in MVP
-    but architecturally correct)
+40. DEVICES summary: no null installType, label "Tip uredjaja"
+41. EMAIL BEFORE AI LAYER -- strategic decision: bot must deliver leads
+    before adding AI complexity. Executed as Task [5].
+42. summaryNotes[] and emailSent initialized in createSession()
+43. Email transport = Brevo HTTP API, not Gmail SMTP
+44. sendSummaryEmail() is non-blocking (no await at call site)
+45. buildTechnicianEmail() is a pure function exported for unit testing
+46. emailSent = true only after response.ok -- failed sends can retry
+47. buildSessionKey(channel, userId) -> "channel:userId" [7a]
+    Prevents session key collisions across future channels.
+48. handleIncomingText({ channel, userId, text }) [7a]
+    Channel-agnostic wrapper. Used by POST /webhook and GET /next.
+    No behavior change -- structural groundwork only.
+49. /reset default resets both test:<id> and messenger:<id> [7a-hotfix]
+    Restores manual Messenger smoke-testing after [7a] key change.
+50. isContinueAnswer() replaces strict "dalje" matching [6g]
+    Strips emoji/symbol noise; Android Quick Reply works correctly.
 
-Minor INSTALLATIONS UX polish backlog (NOT blocking):
-- Remove repeated "Razumijem" in B1/B4 demolition intro
-- Shorten some INSTALLATIONS prompts
-
-Future vision (post-MVP):
-- Multi-channel: Instagram, WhatsApp, Viber
-- Bot-as-a-Service for other local businesses (SaaS model)
-- Infrastructure: Render → VPS (Hetzner) → Dedicated Server
-- Own domain (majstorbanjaluka.ba) for better email deliverability
-  (DKIM, DMARC, SPF — currently using Gmail freemail domain via Brevo)
+Future vision:
+  - Multi-channel: Web -> Viber -> WhatsApp -> Instagram
+  - Bot-as-a-Service for local businesses in BiH/region (SaaS)
+  - Infrastructure: Render -> VPS (Hetzner) -> Dedicated
+  - Own domain (majstorbanjaluka.ba) for email deliverability
+    (DKIM, DMARC, SPF -- currently Gmail freemail via Brevo)
 
 ================================================================
-SECTION 12 — ROADMAP
+SECTION 15 -- ROADMAP
 ================================================================
 
-[1]     Multi-user sessions                                    ✅ DONE
-[2a]    classifyBranch()                                       ✅ DONE
-[2b]    Branch A — DEVICES flow                               ✅ DONE
-[2b+]   extractDeviceType()                                    ✅ DONE
-[2c]    Branch B — INSTALLATIONS flow                         ✅ DONE
-[2d]    Stabilization                                          ✅ DONE
-[3a]    Webhook foundation                                     ✅ DONE
-[3b]    Deploy to Render                                       ✅ DONE
-[3c]    Messenger webhook + Send API                           ✅ DONE
-[4a]    Image/attachment handling in POST /webhook             ✅ DONE
-[4b-UX] UX Refactor — DEVICES v2                              ✅ DONE
-[4c-UX] UX Refactor — INSTALLATIONS v2                        ✅ DONE / STABLE
-        Commit: 931284b — 39/39, 14/14, 79/79 PASS
-[4d-UX] DEVICES flow polish + keyword matrix fix               ✅ DONE / STABLE
-        Commit: 90a5cc1 — 28/28 PASS
-        - shouldAskDeviceInstallType(), devicesPhotoPrompt()
-        - Expanded extractDeviceType() and keyword matrix
-        - Room question removed; summary null fix
-[5]     Technician Email Notification MVP                      ✅ DONE / PRODUCTION VERIFIED
-        Commit: 55f9a73 — Brevo HTTP API
-        - createSession() extended: summaryNotes: [], emailSent: false
-        - buildTechnicianEmail(session) — pure function, exported for testing
-        - sendSummaryEmail(session) — async, non-blocking, Brevo HTTP API
-        - test-email-builder.js — 14/14 PASS
-        - Total tests: 174/174 PASS
-        - Messenger smoke test: DEVICES + INSTALLATIONS, with + without photos
-        - Render log confirmed: "Technician email notification sent."
-        - Lead delivery path: Messenger → bot → Brevo → Gmail ✅ LIVE
+[1]      Multi-user sessions                                   DONE
+[2a]     classifyBranch()                                      DONE
+[2b]     Branch A -- DEVICES flow                             DONE
+[2b+]    extractDeviceType()                                   DONE
+[2c]     Branch B -- INSTALLATIONS flow                       DONE
+[2d]     Stabilization                                         DONE
+[3a]     Webhook foundation                                    DONE
+[3b]     Deploy to Render                                      DONE
+[3c]     Messenger webhook + Send API                          DONE
+[4a]     Image/attachment handling in POST /webhook            DONE
+[4b-UX]  UX Refactor -- DEVICES v2                            DONE
+[4c-UX]  UX Refactor -- INSTALLATIONS v2                      DONE / STABLE
+         Commit: 931284b -- 39/39, 14/14, 79/79 PASS
+[4d-UX]  DEVICES flow polish + keyword matrix fix              DONE / STABLE
+         Commit: 90a5cc1 -- 28/28 PASS
+[5]      Technician Email Notification MVP                     DONE / PRODUCTION VERIFIED
+         Commit: 55f9a73 -- Brevo HTTP API
+         174/174 PASS at time of completion
+         Messenger smoke test confirmed with and without photos
+         Render log: "Technician email notification sent."
+         Gmail receiving leads confirmed
 
-        SMTP history (for reference):
-        [5a] Gmail SMTP port 465 → IPv6 ENETUNREACH on Render
-        [5b] Gmail SMTP port 587 → IPv6 ENETUNREACH on Render
-        [5c] DNS ipv4first workaround → Connection timeout
-        [5d] Brevo HTTP API → SUCCESS ✅
+         SMTP history (for reference):
+           [5a] Gmail SMTP port 465 -> IPv6 ENETUNREACH on Render
+           [5b] Gmail SMTP port 587 -> IPv6 ENETUNREACH on Render
+           [5c] DNS ipv4first workaround -> Connection timeout
+           [5d] Brevo HTTP API -> SUCCESS
 
-[6g]    Android Messenger Quick Reply "Dalje" fix             ✅ DONE
-        Regression-safe bugfix — no flow/email/keyword logic changed.
-        - isContinueAnswer(text) added next to normalizeText().
-        - Strict === "dalje" checks replaced by isContinueAnswer() at
-          ASK_PHOTOS, ASK_LOCATION, ASK_NAME.
-        - Quick Reply title changed "➡️ Dalje" → "Dalje" (payload stays
-          "Dalje"). Stops Android sending the emoji title back as text.
-        - isContinueAnswer exported for testing.
-        - test-continue-answer-quickreply.js — 27/27 PASS.
-        - Full suite: 201/201 PASS.
-        Result: Android Messenger Quick Reply "Dalje" now advances the
-        flow; Messenger Web behavior preserved; no photo-prompt loop.
+[6g]     Android Messenger Quick Reply "Dalje" fix             DONE
+         isContinueAnswer(text) replaces strict "=== dalje" checks
+         Quick Reply title changed to plain "Dalje" (no emoji)
+         27 regression tests added. Suite: 201/201 PASS.
+         Android Messenger smoke test: DEVICES + INSTALLATIONS confirmed
 
-[6]     Meta App Review preparation + Privacy Policy           ⏸ PAUSED
-        Was NEXT — now PAUSED, NOT abandoned.
-        Reason: Meta account is currently under restriction, and there
-        is no registered business documentation yet, so Meta App Review
-        / Business Portfolio verification cannot proceed at this time.
-        Privacy Policy draft exists (privacy-policy.html) and is kept
-        for when this is resumed.
-        Resume condition: Meta restriction cleared AND/OR registered
-        business documentation available.
-        Original needs (still valid when resumed):
-          - Privacy Policy URL (simple webpage)
-          - Description of business purpose
-          - Demo video of functional bot conversation
-          - Complete conversation example for reviewer
+[6]      Meta App Review preparation + Privacy Policy          PAUSED
+         Not abandoned. Resume when Meta restriction is cleared
+         and/or registered business documentation is available.
+         privacy-policy.html draft preserved -- do not delete.
 
-        STRATEGIC DIRECTION — AKiPP
-        Automatizacija Komunikacije i Prikupljanja Podataka
-        (Automation of Communication and Data Collection)
-        While Meta App Review is paused, the project pivots toward a
-        channel-agnostic, reusable lead-capture engine. The goal is a
-        bot core that automates client communication and structured
-        data collection independently of any single platform — so the
-        same engine can serve Messenger today and other channels later
-        without rewriting the flow logic. This makes the product less
-        dependent on Meta approval timelines and lays the groundwork for
-        the future Bot-as-a-Service vision.
+[7a]     Channel Adapter Foundation                            DONE
+         Commit: ac8d210
+         buildSessionKey(channel, userId) added + exported
+         handleIncomingText({ channel, userId, text }) added + exported
+         Sessions now keyed as "messenger:<id>" and "test:<id>"
+         test-channel-adapter.js -- 11/11 PASS
+         Suite: 212/212 PASS
 
-[7a]    Channel Adapter Foundation                            ✅ DONE
-        First step of the AKiPP direction. NO behavior change.
-        Channel-aware session keys introduced so the core processMessage()
-        flow is no longer tied to a raw, channel-specific user id.
-        Pure structural groundwork — no flow/email/keyword/UX change:
-          - buildSessionKey(channel, userId) → "channel:userId".
-          - handleIncomingText({channel, userId, text}) wraps processMessage().
-          - Sessions now keyed as messenger:<senderId> (Messenger text AND
-            photo attachments share the SAME key) and test:<userId> (GET
-            /next + GET /reset).
-          - processMessage() stays a pure function — unchanged behavior.
-          - Both helpers exported via module.exports for testing.
-          - test-channel-adapter.js — 11/11 PASS.
-          - Full suite: 212/212 PASS.
-        NOTE: changing Messenger from raw senderId to messenger:<senderId>
-        resets active in-memory Messenger sessions on the next deploy. This is
-        harmless — sessions are in-memory only and already reset on every
-        Render restart/deploy.
-        This prepares multi-channel support (Web widget, Viber, WhatsApp,
-        Instagram) WITHOUT touching DEVICES/INSTALLATIONS/email logic.
+[7a-h]   Restore Messenger reset after channel adapter         DONE
+         Commit: 7eacabf (latest known HEAD)
+         /reset without channel param now resets BOTH
+         test:<id> and messenger:<id>
+         Manual Messenger smoke-testing restored.
 
-[7b]    Channel transport adapter (send/receive isolation)    ← NEXT (optional)
-        Possible follow-up to [7a]: isolate the Messenger-specific
-        send/receive code (sendMessengerReply / sendMessengerQuickReply /
-        webhook parsing) behind an adapter interface so a new channel can be
-        added without touching POST /webhook. NOT designed or implemented yet.
+[7b]     Channel Transport Adapter Foundation                  <- NEXT
+         Isolate Messenger-specific send/receive handling
+         (sendMessengerReply, sendMessengerQuickReply, webhook parsing)
+         behind a small adapter boundary so a new channel can be added
+         without modifying POST /webhook.
+         No behavior change.
+         Do NOT touch DEVICES, INSTALLATIONS, email, keywords, or AI.
 
-[7]     Production smoke test with real clients               ← after channel work
-        Run with real clients, collect edge cases.
-        Real data informs AI layer design.
+[7c]     Web/Internal Channel API MVP                          <- AFTER [7b]
+         Add a minimal HTTP endpoint for web/internal channel.
+         Calls handleIncomingText({ channel: "web", userId, text }).
+         Returns JSON response.
+         First version: text-only (no photo handling yet).
 
-[8]     Google Sheets lead logging                            ← optional
-        One row per completed session.
-        May be skipped if email is sufficient.
+[7d]     Minimal Web Chat / Test UI                            <- AFTER [7c]
+         Simple local or hosted page for manual testing of web channel.
+         No AI, no scheduling, no pricing.
 
-[9]     AI layer (adapter pattern: Gemini / Claude / GPT)     ← after [7]
-        Implement AFTER real production usage.
-        Real user data will reveal what AI needs to improve.
+[7e]     Web channel smoke tests + documentation               <- AFTER [7d]
+         Confirm first real new channel works with same core flow
+         and preserves email lead delivery.
+
+[8]      Google Sheets / CRM lead logging                      <- OPTIONAL
+         One row per completed session.
+         May be skipped if email delivery is sufficient.
+
+[9]      AI layer (adapter: Gemini / Claude / GPT)             <- LATER
+         Implement AFTER real production usage across channels.
+         Real user data reveals what AI actually needs to improve.
+         Do NOT start this before having multi-channel data.
+
+Estimated path to first real new channel:
+  [7b] Channel Transport Adapter Foundation   -- 1 careful work block
+  [7c] Web/Internal Channel API MVP           -- 1 careful work block
+  [7d] Minimal Web Chat / Test UI             -- 1 careful work block
+  [7e] Smoke tests + documentation            -- 0.5-1 work block
+  Realistic total: 3-4 work blocks.
+  Conservative total: up to 5 blocks if photo support is included
+  in the first web channel version.
 
 ================================================================
 NOTES FOR CLAUDE CODE
@@ -689,29 +735,33 @@ NOTES FOR CLAUDE CODE
 - The project owner is NOT a developer. Always explain simply.
 - Always explain what code does and why, alongside the code.
 - Give terminal commands copy/paste ready, one at a time.
-- Guide step by step — small task → confirm → next task.
+- Guide step by step -- small task -> confirm -> next task.
 - Communicate in BHS (Bosnian/Croatian/Serbian).
 - Write all code, comments, and docs in English.
 - Active project folder: MajstorBL_GPT
 - Entry point for logic:  src/app.js
 - Entry point for server: src/server.js
-- Flow specs:  MAJSTOR_BL_DEVICES_FLOW_v2.md (DEVICES)
-               MAJSTOR_BL_INSTALLATIONS_FLOW_v2.md (INSTALLATIONS)
+- Flow specs:
+    MAJSTOR_BL_DEVICES_FLOW_v2.md      (DEVICES)
+    MAJSTOR_BL_INSTALLATIONS_FLOW_v2.md (INSTALLATIONS)
 - Test files (root folder, never delete):
-    test-email-builder.js  (14 tests — unit test, NO server needed)
-    test-installations-keywords.js  (39 tests — server required)
-    test-installations-keywords-v2.js  (14 tests — server required)
-    test-installations-keywords-master.js  (79 tests — server required)
-    test-devices-flow-polish.js  (28 tests — server required)
-    test-continue-answer-quickreply.js  (27 tests — Part A unit / Part B server)
-    test-channel-adapter.js  (11 tests — pure in-memory unit test, NO server needed)
-- ALWAYS run ALL seven test suites before committing.
+    test-email-builder.js                  (14 -- unit, NO server)
+    test-installations-keywords.js         (39 -- server required)
+    test-installations-keywords-v2.js      (14 -- server required)
+    test-installations-keywords-master.js  (79 -- server required)
+    test-devices-flow-polish.js            (28 -- server required)
+    test-continue-answer-quickreply.js     (27 -- Part A unit / Part B server)
+    test-channel-adapter.js               (11 -- unit, NO server)
+- ALWAYS run ALL seven suites before committing.
 - ALWAYS Ctrl+S before git add/commit/push.
 - Do NOT touch DEVICES flow unless explicitly asked.
 - Do NOT touch INSTALLATIONS flow unless explicitly asked.
 - Do NOT touch email functions unless explicitly asked.
+- Do NOT update CLAUDE.md unless explicitly instructed.
+  After implementation and tests, only report what should be documented.
 - Do NOT add new states to processMessage() without mapping them in
   continueInstallationsFlow() or the DEVICES state machine.
+- AKiPP next step is [7b] -- not AI, not Viber, not WhatsApp.
 
 ================================================================
 END OF DOCUMENT

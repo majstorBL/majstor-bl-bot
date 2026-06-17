@@ -2564,6 +2564,12 @@ function handleIncomingText({ channel, userId, text }) {
 // channel string is needed so it is never hardcoded inline.
 const CHANNEL_MESSENGER = "messenger";
 
+// Canonical channel name for the Web/Internal channel (Task [7c]). Used by the
+// POST /channels/web/message endpoint so the channel string is never hardcoded
+// inline. Sessions are keyed "web:<userId>" via buildSessionKey(), isolating
+// them from "messenger:<id>" and "test:<id>" sessions.
+const CHANNEL_WEB = "web";
+
 // Builds the Messenger session key for a given Facebook senderId. Wraps the
 // shared buildSessionKey() so BOTH the text path and the photo/attachment path
 // resolve to the exact same "messenger:<senderId>" session.
@@ -2894,6 +2900,32 @@ app.post("/webhook", (req, res) => {
 });
 
 // ── Testing routes (browser-based, temporary) ─────────────────────────────
+// ── Web/Internal Channel API (Task [7c]) ────────────────────────────────────
+// Minimal text-only HTTP endpoint for the Web/Internal channel. It is a thin
+// transport adapter only: it validates the JSON body, delegates to the same
+// channel-agnostic handleIncomingText() wrapper the Messenger webhook and the
+// /next test endpoint use, and returns the bot reply as JSON. No photo/file
+// upload, no Quick Reply, no AI, no scheduling, no pricing — those are not part
+// of this task. Web sessions are isolated as "web:<userId>" via the channel
+// passed to handleIncomingText() (CHANNEL_WEB), so they never collide with
+// Messenger or test sessions sharing the same raw id.
+app.post("/channels/web/message", (req, res) => {
+  const body = req.body || {};
+  const { userId, text } = body;
+
+  // Validation: userId must be a non-empty string, text must be a string.
+  // Errors are returned as simple, consistent JSON — never raw thrown errors.
+  if (typeof userId !== "string" || userId.trim() === "") {
+    return res.status(400).json({ error: "userId and text are required" });
+  }
+  if (typeof text !== "string") {
+    return res.status(400).json({ error: "userId and text are required" });
+  }
+
+  const reply = handleIncomingText({ channel: CHANNEL_WEB, userId, text });
+  return res.json({ reply });
+});
+
 app.get("/next", (req, res) => {
   if (req.url === "/favicon.ico") return res.end();
 
@@ -2951,3 +2983,6 @@ module.exports.handleIncomingText = handleIncomingText;
 module.exports.CHANNEL_MESSENGER = CHANNEL_MESSENGER;
 module.exports.buildMessengerSessionKey = buildMessengerSessionKey;
 module.exports.extractMessengerInput = extractMessengerInput;
+// [7c] Exposed for the Web/Internal channel API regression test. Tests only —
+// server.js only consumes the Express app and is unaffected by this.
+module.exports.CHANNEL_WEB = CHANNEL_WEB;

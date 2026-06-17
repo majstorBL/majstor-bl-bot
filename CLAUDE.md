@@ -1,7 +1,8 @@
 ================================================================
 MAJSTOR BANJA LUKA / AKiPP — CHATBOT + LEAD INTAKE SYSTEM
 Master Context Document for Claude Code
-Last updated: June 2026 (Task [7b] Channel Transport Adapter Foundation ✅ DONE)
+Last updated: June 2026 (Task [7c] Web/Internal Channel API MVP ✅ DONE)
+(Task [7b] Channel Transport Adapter Foundation ✅ DONE)
 (Task [7a] Channel Adapter Foundation ✅ DONE)
 (Task [7a-hotfix] Restore Messenger reset ✅ DONE)
 (Task [6g] Android Messenger Quick Reply "Dalje" fix ✅ DONE)
@@ -44,9 +45,11 @@ Services:
 - Device installation (boilers, electric stoves, cooktops, range hoods)
 
 Current production channel: Facebook Messenger
+Web/Internal API endpoint: implemented and live for internal text-only testing
 Strategic product direction: AKiPP — channel-agnostic communication and
 data collection system
-Next planned real channel: Web/Internal channel MVP
+Next practical step: [7d] Minimal Web Chat / Test UI, using the
+existing [7c] Web/Internal API endpoint
 
 ================================================================
 SECTION 2 — PROJECT GOAL
@@ -89,31 +92,50 @@ processMessage()
 -> Brevo HTTP API
 -> Gmail / technician inbox
 
-AKiPP target architecture:
+AKiPP current / target architecture:
 
 Client
--> Channel Transport Adapter - messenger adapter [LIVE -- [7b] DONE] - web/internal adapter [NEXT -- Task 7c] - future: Viber / WhatsApp / Instagram
+-> Channel Transport Adapter
+   messenger adapter [LIVE -- [7b] DONE]
+   web/internal API adapter [LIVE FOR INTERNAL TEXT TESTING -- [7c] DONE]
+   future: Viber / WhatsApp / Instagram
 -> handleIncomingText({ channel, userId, text })
 -> processMessage(sessionKey, text)
 -> Channel Transport Adapter reply
 -> Client
 
+Web/Internal flow (Task [7c]):
+
+Client / internal web caller
+-> POST /channels/web/message
+-> JSON body { userId, text }
+-> validation: userId non-empty string, text string
+-> handleIncomingText({ channel: "web", userId, text })
+-> processMessage(sessionKey, text)
+-> JSON { reply }
+-> Client
+
+[7c] is NOT a UI and NOT a public web chat yet. It is a minimal
+text-only HTTP JSON endpoint for controlled internal testing.
+
 Key principles:
 "Transport First, Intelligence Later."
 AI layer remains future work -- not the next step.
-The next practical goal is Web/Internal channel MVP.
+The next practical goal is [7d] Minimal Web Chat / Test UI, not the
+raw Web/Internal API endpoint (already DONE in [7c]).
 processMessage() is transport-agnostic and does not know about
-Messenger payloads or Send API details. It reads/writes the
-in-memory sessions{} store through the sessionKey -- not a fully
-pure reducer in the academic sense, but acceptable for MVP.
+Messenger payloads, Send API details, or the Web/Internal HTTP endpoint.
+It reads/writes the in-memory sessions{} store through the sessionKey --
+not a fully pure reducer in the academic sense, but acceptable for MVP.
 
-Current file structure (active project folder: MajstorBL_GPT):
+Current file structure (active project folder: E:\Majstor_BL\Majstor_BL_Gpt):
 
 src/app.js -- Express app, all route logic, session state,
 processMessage(), sendMessengerReply(),
 sendMessengerQuickReply(),
 buildMessengerSessionKey(), extractMessengerInput(),
 sendMessengerChannelReply(),
+CHANNEL_WEB, POST /channels/web/message,
 buildTechnicianEmail(), sendSummaryEmail(),
 buildSessionKey(), handleIncomingText()
 src/server.js -- Only starts the server, imports app from app.js
@@ -128,12 +150,15 @@ test-installations-keywords-master.js -- master keyword matrix (79)
 test-devices-flow-polish.js -- DEVICES polish suite (28)
 test-continue-answer-quickreply.js -- Quick Reply "Dalje" suite (27)
 test-channel-adapter.js -- Channel adapter suite (17)
+test-web-channel.js -- Web/Internal channel API suite (19; self-contained
+ephemeral HTTP server; no localhost:3000 dev server required)
 
 Entry point: src/server.js (package.json -> "start": "node src/server.js")
 Deployed at: Render.com (auto-deploy from GitHub)
 
 Git log (latest known):
-315b6c7 Add Messenger transport adapter foundation <- latest known HEAD
+d9133f9 Add Web internal channel API MVP
+315b6c7 Add Messenger transport adapter foundation
 97ce19b Update CLAUDE.md for AKiPP roadmap
 7eacabf Restore Messenger reset after channel adapter
 ac8d210 Add channel adapter foundation (Task 7a)
@@ -157,11 +182,13 @@ Purpose:
 - Collect contact information
 - Send a clean summary to the business owner / technician
 
-Current channel:
-Facebook Messenger [LIVE]
+Current channels:
 
-Next planned channel:
-Web/Internal channel MVP
+- Facebook Messenger [LIVE]
+- Web/Internal API endpoint [LIVE FOR INTERNAL TEXT TESTING -- [7c] DONE]
+
+Next planned step:
+[7d] Minimal Web Chat / Test UI
 
 NOT next:
 
@@ -200,13 +227,16 @@ CORE / SHARED:
 - handleIncomingText({ channel, userId, text }) [7a]
   Channel-agnostic entry wrapper. Builds the session key via
   buildSessionKey() and calls processMessage(sessionKey, text),
-  returning the same reply string. Used by POST /webhook (channel
-  "messenger") and GET /next (channel "test"). No behavior change.
-  Exported via module.exports.
+  returning the same reply string. Used by:
+  POST /webhook with channel "messenger"
+  GET /next with channel "test"
+  POST /channels/web/message with channel "web"
+  No behavior change. Exported via module.exports.
 
 - Sessions keyed as "channel:userId" [7a]:
   messenger:<senderId> -- Messenger text AND photo attachments
   test:<userId> -- GET /next and GET /reset (browser testing)
+  web:<userId> -- POST /channels/web/message
   NOTE: switching Messenger key from raw senderId to
   "messenger:<senderId>" resets active in-memory sessions on next
   deploy. Harmless -- sessions are in-memory only and reset on every
@@ -242,7 +272,8 @@ CORE / SHARED:
   Detects greeting-only and contact-intent phrases.
   Runs out-of-scope checks BEFORE classifyBranch().
 - processMessage(sessionKey, text) -- core state machine
-  Transport-agnostic. Used by GET /next and POST /webhook.
+  Transport-agnostic. Used by GET /next, POST /webhook, and
+  POST /channels/web/message.
 - sendMessengerReply() -- low-level: sends plain text via Facebook Send API
 - sendMessengerQuickReply() -- low-level: sends Quick Reply buttons
   Used ONLY on ASK_PHOTOS step in both branches.
@@ -286,6 +317,41 @@ MESSENGER TRANSPORT ADAPTER (Task [7b]) DONE / STABLE:
   decision logic.
   Behavior is IDENTICAL to the pre-[7b] inline logic -- this is a
   structural refactor only, no user-facing change.
+
+WEB/INTERNAL CHANNEL API (Task [7c]) DONE / LIVE FOR INTERNAL TEXT TESTING:
+
+- CHANNEL_WEB = "web" [7c]
+  Canonical channel constant for the Web/Internal channel. Used by
+  POST /channels/web/message so the channel string is not hardcoded
+  inline. Exported via module.exports.CHANNEL_WEB for regression tests.
+
+- POST /channels/web/message [7c]
+  Text-only HTTP JSON endpoint for internal Web channel testing.
+  Accepts body: { "userId": "<non-empty string>", "text": "<string>" }
+  Validation:
+  userId must be a non-empty string.
+  text must be a string.
+  text: "" is valid and acts as the START trigger.
+  Invalid / missing userId or non-string / missing text returns
+  HTTP 400 JSON: { "error": "userId and text are required" }
+  Calls handleIncomingText({ channel: CHANNEL_WEB, userId, text }).
+  Returns JSON: { "reply": "<bot reply string>" }.
+  Uses web:<userId> session keys, isolated from messenger:<userId>
+  and test:<userId>.
+
+- [7c] endpoint limitations / scope:
+  Text-only.
+  Does not support photos or videos yet.
+  Does not send channel-specific rich messages.
+  Does not add UI.
+  Does not add AI.
+  Does not change Messenger behavior.
+  Does not change DEVICES flow.
+  Does not change INSTALLATIONS flow.
+  Does not change Brevo/email behavior.
+
+- module.exports.CHANNEL_WEB [7c]
+  Exported only for Web/Internal channel API regression tests.
 
 EMAIL NOTIFICATION (Task [5]) DONE / PRODUCTION VERIFIED:
 
@@ -414,9 +480,16 @@ SECTION 6 -- QA / REGRESSION SUITES
 ================================================================
 
 All test files live in the project root (not in src/).
-Exception: test-email-builder.js and test-channel-adapter.js are
-pure unit tests -- no server needed.
-All other test files require the server running in a second terminal.
+There are now eight maintained regression suites.
+
+Server requirements:
+
+- test-email-builder.js and test-channel-adapter.js are pure unit tests --
+  no server needed.
+- test-web-channel.js starts its own Express server on an ephemeral port --
+  no localhost:3000 dev server required.
+- Some older HTTP suites still require the local dev server running on
+  localhost:3000 in a second terminal.
 
 test-email-builder.js -- 14 tests -- 14/14 PASS
 test-installations-keywords.js -- 39 tests -- 39/39 PASS
@@ -425,11 +498,22 @@ test-installations-keywords-master.js -- 79 tests -- 79/79 PASS
 test-devices-flow-polish.js -- 28 tests -- 28/28 PASS
 test-continue-answer-quickreply.js -- 27 tests -- 27/27 PASS
 test-channel-adapter.js -- 17 tests -- 17/17 PASS
-TOTAL: 218 tests -- 218/218 PASS
+test-web-channel.js -- 19 tests -- 19/19 PASS
+TOTAL: 237 tests -- 237/237 PASS
 
 test-continue-answer-quickreply.js has two parts:
 Part A -- unit tests isContinueAnswer() without server
 Part B -- HTTP flow tests that require the server
+
+Manual Render smoke test after [7c] deploy:
+Endpoint: /channels/web/message
+Two-step same-userId test:
+
+1. text: "" -> opening prompt:
+   "Bot: Zdravo! Koju uslugu trebate? Opišite ukratko šta Vam treba."
+2. text: "Laptop ne radi" -> expected DEVICES continuation, asks for
+   brand/proizvođač.
+   Result: [7c] Render smoke test -- PASS
 
 MANDATORY -- run ALL before any commit:
 node --check src/app.js
@@ -440,6 +524,7 @@ node test-installations-keywords-master.js
 node test-devices-flow-polish.js
 node test-continue-answer-quickreply.js
 node test-channel-adapter.js
+node test-web-channel.js
 
 Do NOT delete any test files. They are the regression safety net.
 
@@ -449,12 +534,22 @@ SECTION 7 -- API / ENDPOINTS
 
 GET /webhook -- Meta webhook verification
 POST /webhook -- Messenger events + reply
+POST /channels/web/message -- Web/Internal text-only JSON endpoint [7c]
 GET /next?userId=...&tekst=... -- browser testing endpoint
 GET /reset?userId=... -- resets test + messenger sessions
 GET /reset?userId=...&channel=... -- resets only that channel session
 
+POST /channels/web/message accepts:
+{ "userId": "<non-empty string>", "text": "<string>" }
+Returns:
+{ "reply": "<bot reply string>" }
+Validation failure returns HTTP 400:
+{ "error": "userId and text are required" }
+text: "" is valid and starts the conversation.
+
 GET /next and GET /reset are temporary testing endpoints.
-Core production flow runs through POST /webhook only.
+Core Messenger production flow runs through POST /webhook.
+Web/Internal internal text testing runs through POST /channels/web/message.
 
 module.exports exposes for testing:
 module.exports.buildTechnicianEmail -- pure function
@@ -465,6 +560,7 @@ module.exports.handleIncomingText -- channel-agnostic entry wrapper
 module.exports.CHANNEL_MESSENGER -- Messenger channel constant
 module.exports.buildMessengerSessionKey -- Messenger session-key helper
 module.exports.extractMessengerInput -- Messenger input extractor
+module.exports.CHANNEL_WEB -- Web/Internal channel constant
 
 ================================================================
 SECTION 8 -- TOP-LEVEL ROUTING
@@ -622,9 +718,10 @@ SECTION 14 -- DEVELOPMENT DECISIONS
 5.  Free-text only; ONE exception: Quick Reply on photo step
 6.  Future AI role: classify intent + extract data from natural language.
     AI layer is NOT implemented and is NOT the next step.
-7.  "Transport First, Intelligence Later" -- transport complete
+7.  "Transport First, Intelligence Later" -- Messenger + Web/Internal API transport foundation complete
 8.  All secrets in env vars -- never hardcoded
-9.  processMessage() is transport-agnostic -- used by /next and /webhook
+9.  processMessage() is transport-agnostic -- used by /next, /webhook,
+    and /channels/web/message
 10. sendMessengerReply() uses native https -- no axios dependency
 11. res.status(200) sent AFTER forEach in POST /webhook handler
 12. Meta App Review required for public users -- PAUSED for now
@@ -685,6 +782,23 @@ SECTION 14 -- DEVELOPMENT DECISIONS
     Strips "Bot: " prefix and decides plain vs. Quick Reply based on
     session.state === "ASK_PHOTOS". Structural refactor only --
     behavior identical to pre-[7b] inline logic.
+55. CHANNEL_WEB constant [7c]
+    Canonical channel string for Web/Internal endpoint.
+56. POST /channels/web/message [7c]
+    Text-only JSON endpoint. Validates userId/text, allows text: ""
+    as START trigger, calls handleIncomingText({ channel: CHANNEL_WEB,
+    userId, text }), and returns { reply }.
+57. Web sessions [7c]
+    Uses web:<userId> keys. No collision with messenger:<id> or test:<id>.
+58. [7c] is raw API only
+    No UI, no photo support, no video, no AI, no Messenger behavior change,
+    no DEVICES/INSTALLATIONS change, no Brevo/email change.
+59. Security note [7c]
+    Endpoint is currently text-only and unauthenticated. Acceptable for
+    controlled MVP/internal smoke testing, but authentication/token protection
+    should be considered before exposing a public web UI or collecting real
+    public web leads. Do not implement security changes unless explicitly
+    scoped in a future task.
 
 Future vision:
 
@@ -772,19 +886,28 @@ Quick Reply "Dalje" -- PASS
 Summary email delivered -- PASS
 Negative confirmation / no-contact path -- PASS
 
-[7c] Web/Internal Channel API MVP <- NEXT
-Add a minimal HTTP endpoint for web/internal channel.
-Calls handleIncomingText({ channel: "web", userId, text }).
-Returns JSON response.
-First version: text-only (no photo handling yet).
+[7c] Web/Internal Channel API MVP DONE
+CHANNEL_WEB = "web"
+POST /channels/web/message
+JSON { userId, text } -> { reply }
+text: "" allowed as START trigger
+Web sessions isolated as web:<userId>
+test-web-channel.js added -- 19/19 PASS
+Full suite: 237/237 PASS
+Render smoke test: PASS
+Commit: d9133f9 Add Web internal channel API MVP
 
-[7d] Minimal Web Chat / Test UI <- AFTER [7c]
-Simple local or hosted page for manual testing of web channel.
-No AI, no scheduling, no pricing.
+[7d] Minimal Web Chat / Test UI <- NEXT
+Simple UI that uses the existing [7c] endpoint.
+No AI.
+No pricing.
+No scheduling.
+No photo support unless explicitly scoped later.
 
 [7e] Web channel smoke tests + documentation <- AFTER [7d]
-Confirm first real new channel works with same core flow
-and preserves email lead delivery.
+Smoke testing and documenting the minimal Web UI, not the already-completed
+raw API endpoint. Confirm it uses the same core flow and preserves email
+lead delivery.
 
 [8] Google Sheets / CRM lead logging <- OPTIONAL
 One row per completed session.
@@ -795,13 +918,11 @@ Implement AFTER real production usage across channels.
 Real user data reveals what AI actually needs to improve.
 Do NOT start this before having multi-channel data.
 
-Estimated path to first real new channel:
-[7c] Web/Internal Channel API MVP -- 1 careful work block
+Estimated path to first practical Web channel experience:
 [7d] Minimal Web Chat / Test UI -- 1 careful work block
-[7e] Smoke tests + documentation -- 0.5-1 work block
-Realistic total: 2-3 work blocks.
-Conservative total: up to 4 blocks if photo support is included
-in the first web channel version.
+[7e] Web UI smoke tests + documentation -- 0.5-1 work block
+Realistic total from current state: 1.5-2 work blocks.
+Photo support is NOT included unless explicitly scoped later.
 
 ================================================================
 NOTES FOR CLAUDE CODE
@@ -813,7 +934,7 @@ NOTES FOR CLAUDE CODE
 - Guide step by step -- small task -> confirm -> next task.
 - Communicate in BHS (Bosnian/Croatian/Serbian).
 - Write all code, comments, and docs in English.
-- Active project folder: MajstorBL_GPT
+- Active project folder: E:\Majstor_BL\Majstor_BL_Gpt
 - Entry point for logic: src/app.js
 - Entry point for server: src/server.js
 - Flow specs:
@@ -827,16 +948,27 @@ NOTES FOR CLAUDE CODE
   test-devices-flow-polish.js (28 -- server required)
   test-continue-answer-quickreply.js (27 -- Part A unit / Part B server)
   test-channel-adapter.js (17 -- unit, NO server)
-- ALWAYS run ALL seven suites before committing.
+  test-web-channel.js (19 -- self-contained ephemeral HTTP server,
+  NO localhost:3000 dev server required)
+- ALWAYS run ALL eight suites before committing.
 - ALWAYS Ctrl+S before git add/commit/push.
 - Do NOT touch DEVICES flow unless explicitly asked.
 - Do NOT touch INSTALLATIONS flow unless explicitly asked.
 - Do NOT touch email functions unless explicitly asked.
+- Do NOT add/stage/commit privacy-policy.html unless explicitly instructed.
+- Do NOT add/stage/commit old untracked chat summary files unless
+  explicitly instructed.
 - Do NOT update CLAUDE.md unless explicitly instructed.
   After implementation and tests, only report what should be documented.
 - Do NOT add new states to processMessage() without mapping them in
   continueInstallationsFlow() or the DEVICES state machine.
-- AKiPP next step is [7c] -- not AI, not Viber, not WhatsApp.
+- AKiPP next step is [7d] Minimal Web Chat / Test UI -- not AI,
+  not Viber, not WhatsApp.
+- [7c] endpoint is currently text-only and unauthenticated. This is
+  acceptable for controlled MVP/internal smoke testing, but
+  authentication/token protection should be considered before exposing
+  a public web UI or collecting real public web leads. Do not implement
+  security changes unless explicitly scoped in a future task.
 
 ================================================================
 END OF DOCUMENT

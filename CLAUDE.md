@@ -1,7 +1,8 @@
 ================================================================
 MAJSTOR BANJA LUKA / AKiPP — CHATBOT + LEAD INTAKE SYSTEM
 Master Context Document for Claude Code
-Last updated: June 2026 (Task [7c] Web/Internal Channel API MVP ✅ DONE)
+Last updated: June 2026 (Task [7d] Minimal Web Chat / Test UI ✅ DONE)
+(Task [7c] Web/Internal Channel API MVP ✅ DONE)
 (Task [7b] Channel Transport Adapter Foundation ✅ DONE)
 (Task [7a] Channel Adapter Foundation ✅ DONE)
 (Task [7a-hotfix] Restore Messenger reset ✅ DONE)
@@ -46,10 +47,12 @@ Services:
 
 Current production channel: Facebook Messenger
 Web/Internal API endpoint: implemented and live for internal text-only testing
+Minimal Web Chat / Test UI: implemented and live for internal browser testing
 Strategic product direction: AKiPP — channel-agnostic communication and
 data collection system
-Next practical step: [7d] Minimal Web Chat / Test UI, using the
-existing [7c] Web/Internal API endpoint
+Current documentation step: [7e] CLAUDE.md update / Web UI documentation
+after [7d]
+Future optional step: Web photo upload support only if explicitly scoped later
 
 ================================================================
 SECTION 2 — PROJECT GOAL
@@ -96,9 +99,11 @@ AKiPP current / target architecture:
 
 Client
 -> Channel Transport Adapter
-   messenger adapter [LIVE -- [7b] DONE]
-   web/internal API adapter [LIVE FOR INTERNAL TEXT TESTING -- [7c] DONE]
-   future: Viber / WhatsApp / Instagram
+
+   - messenger adapter [LIVE -- [7b] DONE]
+   - web/internal API adapter [LIVE FOR INTERNAL TEXT TESTING -- [7c] DONE]
+   - minimal web chat/test UI [LIVE FOR INTERNAL BROWSER TESTING -- [7d] DONE]
+   - future: Viber / WhatsApp / Instagram
 -> handleIncomingText({ channel, userId, text })
 -> processMessage(sessionKey, text)
 -> Channel Transport Adapter reply
@@ -118,13 +123,30 @@ Client / internal web caller
 [7c] is NOT a UI and NOT a public web chat yet. It is a minimal
 text-only HTTP JSON endpoint for controlled internal testing.
 
+Web UI flow (Task [7d]):
+
+Browser user
+-> GET /web-chat
+-> static public/web-chat.html
+-> same-origin fetch("/channels/web/message")
+-> POST /channels/web/message
+-> handleIncomingText({ channel: "web", userId, text })
+-> processMessage(sessionKey, text)
+-> JSON { reply }
+-> reply displayed in browser
+
+/web-chat is only a minimal UI wrapper over the existing [7c]
+POST /channels/web/message endpoint. It does not add or change bot behavior.
+
 Key principles:
 "Transport First, Intelligence Later."
 AI layer remains future work -- not the next step.
-The next practical goal is [7d] Minimal Web Chat / Test UI, not the
-raw Web/Internal API endpoint (already DONE in [7c]).
+The raw Web/Internal API endpoint is DONE in [7c], and the minimal
+Web Chat / Test UI is DONE in [7d]. The current documentation step is
+[7e] CLAUDE.md update / Web UI documentation after [7d].
 processMessage() is transport-agnostic and does not know about
-Messenger payloads, Send API details, or the Web/Internal HTTP endpoint.
+Messenger payloads, Send API details, the Web/Internal HTTP endpoint,
+or the /web-chat static UI route.
 It reads/writes the in-memory sessions{} store through the sessionKey --
 not a fully pure reducer in the academic sense, but acceptable for MVP.
 
@@ -135,10 +157,11 @@ processMessage(), sendMessengerReply(),
 sendMessengerQuickReply(),
 buildMessengerSessionKey(), extractMessengerInput(),
 sendMessengerChannelReply(),
-CHANNEL_WEB, POST /channels/web/message,
+CHANNEL_WEB, POST /channels/web/message, GET /web-chat,
 buildTechnicianEmail(), sendSummaryEmail(),
 buildSessionKey(), handleIncomingText()
 src/server.js -- Only starts the server, imports app from app.js
+public/web-chat.html -- Minimal Web Chat / Test UI [7d]
 package.json -- Project config (no nodemailer -- uses native fetch)
 CLAUDE.md -- This file (auto-read by Claude Code)
 
@@ -152,12 +175,16 @@ test-continue-answer-quickreply.js -- Quick Reply "Dalje" suite (27)
 test-channel-adapter.js -- Channel adapter suite (17)
 test-web-channel.js -- Web/Internal channel API suite (19; self-contained
 ephemeral HTTP server; no localhost:3000 dev server required)
+test-web-ui.js -- Web UI regression suite (12; self-contained ephemeral
+HTTP server; no localhost:3000 dev server required)
 
 Entry point: src/server.js (package.json -> "start": "node src/server.js")
 Deployed at: Render.com (auto-deploy from GitHub)
 
 Git log (latest known):
+2f44fc1 Add minimal Web Chat test UI
 d9133f9 Add Web internal channel API MVP
+5b73aee Update CLAUDE.md after Task 7b
 315b6c7 Add Messenger transport adapter foundation
 97ce19b Update CLAUDE.md for AKiPP roadmap
 7eacabf Restore Messenger reset after channel adapter
@@ -186,9 +213,10 @@ Current channels:
 
 - Facebook Messenger [LIVE]
 - Web/Internal API endpoint [LIVE FOR INTERNAL TEXT TESTING -- [7c] DONE]
+- Minimal Web Chat / Test UI [LIVE FOR INTERNAL BROWSER TESTING -- [7d] DONE]
 
-Next planned step:
-[7d] Minimal Web Chat / Test UI
+Current / next documentation step:
+[7e] CLAUDE.md update / Web UI documentation after [7d]
 
 NOT next:
 
@@ -196,6 +224,7 @@ NOT next:
 - WhatsApp
 - Viber
 - Instagram
+- Web photo upload unless explicitly scoped as a separate future task
 - Google Sheets / CRM logging (optional, not prioritised)
 
 Meta App Review status: PAUSED, not abandoned.
@@ -210,7 +239,7 @@ this is resumed. Do not delete it.
 Messenger bot remains:
 
 - active production proof of concept
-- first and currently only live channel
+- first production customer-facing channel
 - stable transport that is already working
 - foundation for the AKiPP multi-channel architecture
 
@@ -273,7 +302,8 @@ CORE / SHARED:
   Runs out-of-scope checks BEFORE classifyBranch().
 - processMessage(sessionKey, text) -- core state machine
   Transport-agnostic. Used by GET /next, POST /webhook, and
-  POST /channels/web/message.
+  POST /channels/web/message. GET /web-chat does not call it directly;
+  the browser UI calls POST /channels/web/message.
 - sendMessengerReply() -- low-level: sends plain text via Facebook Send API
 - sendMessengerQuickReply() -- low-level: sends Quick Reply buttons
   Used ONLY on ASK_PHOTOS step in both branches.
@@ -352,6 +382,56 @@ WEB/INTERNAL CHANNEL API (Task [7c]) DONE / LIVE FOR INTERNAL TEXT TESTING:
 
 - module.exports.CHANNEL_WEB [7c]
   Exported only for Web/Internal channel API regression tests.
+
+MINIMAL WEB CHAT / TEST UI (Task [7d]) DONE / LIVE FOR INTERNAL BROWSER TESTING:
+
+- GET /web-chat [7d]
+  Serves public/web-chat.html using res.sendFile(...).
+  Uses Node built-in path import for safe file path resolution.
+  Route is a static UI wrapper only. It does not call or modify
+  processMessage(), DEVICES flow, INSTALLATIONS flow, Messenger logic,
+  or Brevo/email logic.
+
+- public/web-chat.html [7d]
+  Standalone minimal browser test UI.
+  Uses embedded CSS and vanilla JavaScript.
+  No frontend framework, no CDN, no build step.
+  Uses same-origin fetch("/channels/web/message") to call the
+  existing [7c] Web/Internal endpoint.
+  Generates a stable web-... userId and stores it in localStorage.
+  Sends one automatic START request with text: "" on initial load.
+  Sends text messages only and ignores empty manual sends.
+  Disables input/send button while a request is in flight.
+  Shows user and bot messages in a simple chat layout.
+  Preserves multiline bot replies with CSS white-space: pre-wrap.
+  Contains visible note:
+  "Ovo je tekstualni test UI. Ako bot traži fotografiju, za sada
+  napišite „Dalje”."
+  Safe rendering: uses textContent and replaceChildren(); no
+  .innerHTML = assignment.
+
+- "Nova konverzacija" button [7d]
+  Creates a fresh browser userId and clears visible messages.
+  Does NOT call backend /reset.
+
+- [7d] limitations / scope:
+  Text-only internal browser testing UI.
+  No photo upload and no video upload.
+  No AI.
+  No authentication.
+  No pricing.
+  No scheduling.
+  No DB / CRM / Google Sheets.
+  No bot behavior change.
+  Existing bot prompts may still mention Messenger at the photo step.
+  In Web UI testing, user should type "Dalje" when the bot asks for
+  a photo. This is expected and accepted for [7d].
+
+- [7d] security / exposure note:
+  /web-chat is internal/test-oriented and unauthenticated. It should
+  not be treated as a hardened public production widget. Token/auth,
+  rate limiting, public hardening, and web photo upload are future
+  separately scoped concerns only.
 
 EMAIL NOTIFICATION (Task [5]) DONE / PRODUCTION VERIFIED:
 
@@ -480,13 +560,15 @@ SECTION 6 -- QA / REGRESSION SUITES
 ================================================================
 
 All test files live in the project root (not in src/).
-There are now eight maintained regression suites.
+There are now nine maintained regression suites.
 
 Server requirements:
 
 - test-email-builder.js and test-channel-adapter.js are pure unit tests --
   no server needed.
 - test-web-channel.js starts its own Express server on an ephemeral port --
+  no localhost:3000 dev server required.
+- test-web-ui.js starts its own Express server on an ephemeral port --
   no localhost:3000 dev server required.
 - Some older HTTP suites still require the local dev server running on
   localhost:3000 in a second terminal.
@@ -499,7 +581,8 @@ test-devices-flow-polish.js -- 28 tests -- 28/28 PASS
 test-continue-answer-quickreply.js -- 27 tests -- 27/27 PASS
 test-channel-adapter.js -- 17 tests -- 17/17 PASS
 test-web-channel.js -- 19 tests -- 19/19 PASS
-TOTAL: 237 tests -- 237/237 PASS
+test-web-ui.js -- 12 tests -- 12/12 PASS
+TOTAL: 249 tests -- 249/249 PASS
 
 test-continue-answer-quickreply.js has two parts:
 Part A -- unit tests isContinueAnswer() without server
@@ -515,6 +598,20 @@ Two-step same-userId test:
    brand/proizvođač.
    Result: [7c] Render smoke test -- PASS
 
+Manual Render/browser smoke test after [7d] deploy:
+Endpoint: /web-chat
+Render URL: https://majstor-bl-bot.onrender.com/web-chat
+Result:
+
+- Web UI opens in browser.
+- DEVICES flow works through the Web UI.
+- INSTALLATIONS flow works through the Web UI.
+- Email summary is delivered after completed request.
+- Negative confirmation / contact refusal path closes politely.
+- Known limitation: Web UI is text-only; at the photo step user types
+  "Dalje". This is expected for [7d].
+  Result: [7d] Render/browser smoke test -- PASS
+
 MANDATORY -- run ALL before any commit:
 node --check src/app.js
 node test-email-builder.js
@@ -525,6 +622,7 @@ node test-devices-flow-polish.js
 node test-continue-answer-quickreply.js
 node test-channel-adapter.js
 node test-web-channel.js
+node test-web-ui.js
 
 Do NOT delete any test files. They are the regression safety net.
 
@@ -535,6 +633,7 @@ SECTION 7 -- API / ENDPOINTS
 GET /webhook -- Meta webhook verification
 POST /webhook -- Messenger events + reply
 POST /channels/web/message -- Web/Internal text-only JSON endpoint [7c]
+GET /web-chat -- Minimal Web Chat / Test UI [7d]
 GET /next?userId=...&tekst=... -- browser testing endpoint
 GET /reset?userId=... -- resets test + messenger sessions
 GET /reset?userId=...&channel=... -- resets only that channel session
@@ -547,9 +646,14 @@ Validation failure returns HTTP 400:
 { "error": "userId and text are required" }
 text: "" is valid and starts the conversation.
 
+GET /web-chat serves the browser UI from public/web-chat.html.
+The UI calls POST /channels/web/message via same-origin fetch.
+The UI is text-only and does not upload photos or videos.
+
 GET /next and GET /reset are temporary testing endpoints.
 Core Messenger production flow runs through POST /webhook.
 Web/Internal internal text testing runs through POST /channels/web/message.
+Minimal Web browser testing runs through GET /web-chat.
 
 module.exports exposes for testing:
 module.exports.buildTechnicianEmail -- pure function
@@ -691,6 +795,7 @@ Target design goal: future provider switch should be
 isolated behind one adapter boundary.
 Future DB: Google Sheets lead logging (optional -- not prioritised)
 Bot channel: Facebook Messenger (Meta Messenger API) LIVE
+Web/Internal API + Minimal Web Chat UI: LIVE FOR INTERNAL TESTING
 Language: BHS for all client-facing communication
 English for code, docs, and AI prompts
 
@@ -799,6 +904,28 @@ SECTION 14 -- DEVELOPMENT DECISIONS
     should be considered before exposing a public web UI or collecting real
     public web leads. Do not implement security changes unless explicitly
     scoped in a future task.
+60. Minimal Web Chat / Test UI [7d]
+    GET /web-chat serves public/web-chat.html as an internal browser test UI.
+    It is a UI wrapper over the existing [7c] POST /channels/web/message
+    endpoint, not a new bot flow.
+61. Minimal Web UI frontend choice [7d]
+    Vanilla HTML/CSS/JS only. No frontend framework, no CDN, no build step.
+62. Web UI browser identity [7d]
+    Stores a stable web-... userId in localStorage. "Nova konverzacija"
+    creates a fresh browser userId and clears UI only; it does not call /reset.
+63. Web UI is text-only in [7d]
+    No photo upload, no video upload. When the bot asks for photos in the
+    web UI, user types "Dalje". Existing Messenger wording at photo step is
+    accepted for this scoped test UI.
+64. Web photo upload is future separate scope
+    Do not add file/photo upload to Web UI unless explicitly scoped later.
+65. Safe Web UI rendering [7d]
+    Uses textContent for message rendering and replaceChildren() for clearing;
+    no .innerHTML = assignment.
+66. Security note [7d]
+    /web-chat is internal/test-oriented and unauthenticated. Do not treat it
+    as a hardened public production widget. Token/auth/rate limiting and
+    public hardening are future separately scoped concerns.
 
 Future vision:
 
@@ -897,17 +1024,30 @@ Full suite: 237/237 PASS
 Render smoke test: PASS
 Commit: d9133f9 Add Web internal channel API MVP
 
-[7d] Minimal Web Chat / Test UI <- NEXT
-Simple UI that uses the existing [7c] endpoint.
-No AI.
-No pricing.
-No scheduling.
-No photo support unless explicitly scoped later.
+[7d] Minimal Web Chat / Test UI DONE
+Commit: 2f44fc1 Add minimal Web Chat test UI
+GET /web-chat serves public/web-chat.html.
+Minimal standalone browser UI uses vanilla HTML/CSS/JS.
+Uses existing [7c] POST /channels/web/message endpoint.
+Generates/stores web-... userId in localStorage.
+"Nova konverzacija" creates fresh browser userId and clears UI only.
+Text-only: no photo upload, no video upload.
+No AI, no pricing, no scheduling, no auth, no DB/CRM/Sheets.
+No bot behavior change. DEVICES, INSTALLATIONS, Messenger and email unchanged.
+test-web-ui.js added -- 12/12 PASS
+Full suite: 249/249 PASS
+Render/browser smoke test: PASS
+Known limitation: text-only Web UI; at photo step, type "Dalje".
+This limitation is expected and accepted for [7d].
 
-[7e] Web channel smoke tests + documentation <- AFTER [7d]
-Smoke testing and documenting the minimal Web UI, not the already-completed
-raw API endpoint. Confirm it uses the same core flow and preserves email
-lead delivery.
+[7e] CLAUDE.md update / Web UI documentation after [7d] <- CURRENT / NEXT
+Documentation-only update after completed [7d].
+Manual Render/browser smoke test after [7d] has already passed.
+Do not mark [7e] DONE until the documentation update is reviewed and committed.
+Do not start AI, public hardening, authentication, or photo upload here.
+
+Web photo upload support <- FUTURE / OPTIONAL / separate scope
+Only if explicitly requested. Do not move ahead of documentation by default.
 
 [8] Google Sheets / CRM lead logging <- OPTIONAL
 One row per completed session.
@@ -918,11 +1058,12 @@ Implement AFTER real production usage across channels.
 Real user data reveals what AI actually needs to improve.
 Do NOT start this before having multi-channel data.
 
-Estimated path to first practical Web channel experience:
-[7d] Minimal Web Chat / Test UI -- 1 careful work block
-[7e] Web UI smoke tests + documentation -- 0.5-1 work block
-Realistic total from current state: 1.5-2 work blocks.
-Photo support is NOT included unless explicitly scoped later.
+Current state after [7d]:
+First practical Web browser test experience exists for internal testing.
+Immediate documentation step: [7e] CLAUDE.md update / Web UI documentation
+after [7d].
+Future optional work: Web photo upload support, public hardening/auth/rate
+limiting, CRM logging, and AI layer -- only if explicitly scoped later.
 
 ================================================================
 NOTES FOR CLAUDE CODE
@@ -937,6 +1078,7 @@ NOTES FOR CLAUDE CODE
 - Active project folder: E:\Majstor_BL\Majstor_BL_Gpt
 - Entry point for logic: src/app.js
 - Entry point for server: src/server.js
+- Minimal Web UI file: public/web-chat.html
 - Flow specs:
   MAJSTOR_BL_DEVICES_FLOW_v2.md (DEVICES)
   MAJSTOR_BL_INSTALLATIONS_FLOW_v2.md (INSTALLATIONS)
@@ -950,7 +1092,9 @@ NOTES FOR CLAUDE CODE
   test-channel-adapter.js (17 -- unit, NO server)
   test-web-channel.js (19 -- self-contained ephemeral HTTP server,
   NO localhost:3000 dev server required)
-- ALWAYS run ALL eight suites before committing.
+  test-web-ui.js (12 -- self-contained ephemeral HTTP server,
+  NO localhost:3000 dev server required)
+- ALWAYS run ALL nine suites before committing.
 - ALWAYS Ctrl+S before git add/commit/push.
 - Do NOT touch DEVICES flow unless explicitly asked.
 - Do NOT touch INSTALLATIONS flow unless explicitly asked.
@@ -962,13 +1106,19 @@ NOTES FOR CLAUDE CODE
   After implementation and tests, only report what should be documented.
 - Do NOT add new states to processMessage() without mapping them in
   continueInstallationsFlow() or the DEVICES state machine.
-- AKiPP next step is [7d] Minimal Web Chat / Test UI -- not AI,
-  not Viber, not WhatsApp.
+- AKiPP current / next documentation step is [7e] CLAUDE.md update /
+  Web UI documentation after [7d] -- not AI, not Viber, not WhatsApp.
+- Do NOT add photo upload to Web UI unless explicitly scoped.
+- Do NOT turn /web-chat into a public production widget unless explicitly
+  scoped. Web UI is currently internal/test-oriented.
 - [7c] endpoint is currently text-only and unauthenticated. This is
   acceptable for controlled MVP/internal smoke testing, but
   authentication/token protection should be considered before exposing
   a public web UI or collecting real public web leads. Do not implement
   security changes unless explicitly scoped in a future task.
+- [7d] /web-chat is internal/test-oriented and unauthenticated. It should
+  not be treated as a hardened public production widget. Token/auth/rate
+  limiting and web photo upload are future separately scoped concerns.
 
 ================================================================
 END OF DOCUMENT

@@ -1,5 +1,6 @@
 const express = require("express");
 const https = require("https"); // built-in Node.js module — no install needed
+const path = require("path"); // built-in Node.js module — no install needed
 const app = express();
 
 // Multi-user session store — each user gets their own session object
@@ -2924,6 +2925,16 @@ app.post("/channels/web/message", (req, res) => {
 
   const reply = handleIncomingText({ channel: CHANNEL_WEB, userId, text });
   return res.json({ reply });
+});
+
+// ── Minimal Web Chat / Test UI (Task [7d]) ─────────────────────────────────
+// Serves a single static HTML page that lets the owner test the existing bot
+// flow in a browser. The page itself uses same-origin fetch() to the existing
+// POST /channels/web/message endpoint ([7c]). This route ONLY serves a file —
+// it does not touch processMessage(), sessions, DEVICES/INSTALLATIONS flows,
+// Messenger, or email. Text-only: no photo/video upload, no AI, no auth.
+app.get("/web-chat", (req, res) => {
+  res.sendFile(path.join(__dirname, "..", "public", "web-chat.html"));
 });
 
 app.get("/next", (req, res) => {

@@ -1,7 +1,8 @@
 ================================================================
 MAJSTOR BANJA LUKA / AKiPP — CHATBOT + LEAD INTAKE SYSTEM
 Master Context Document for Claude Code
-Last updated: June 2026 (Task [8a] Extract email module ✅ DONE)
+Last updated: June 2026 (Task [8b] Extract web routes/module ✅ DONE)
+(Task [8a] Extract email module ✅ DONE)
 (Task [7d] Minimal Web Chat / Test UI ✅ DONE)
 (Task [7c] Web/Internal Channel API MVP ✅ DONE)
 (Task [7b] Channel Transport Adapter Foundation ✅ DONE)
@@ -51,8 +52,8 @@ Web/Internal API endpoint: implemented and live for internal text-only testing
 Minimal Web Chat / Test UI: implemented and live for internal browser testing
 Strategic product direction: AKiPP — channel-agnostic communication and
 data collection system
-Current technical step: [8b] Extract web routes/module — no behavior change
-Current documentation status: CLAUDE.md updated after [8a] email module extraction
+Current technical step: Project Freeze document after [8b]
+Current documentation status: CLAUDE.md updated after [8b] web routes/module extraction
 Future optional step: Web photo upload support only if explicitly scoped later
 
 ================================================================
@@ -143,9 +144,9 @@ Key principles:
 "Transport First, Intelligence Later."
 AI layer remains future work -- not the next step.
 The raw Web/Internal API endpoint is DONE in [7c], the minimal
-Web Chat / Test UI is DONE in [7d], and the email module extraction is
-DONE in [8a]. The current technical step is [8b] Extract web
-routes/module -- no behavior change.
+Web Chat / Test UI is DONE in [7d], the email module extraction is
+DONE in [8a], and the web routes/module extraction is DONE in [8b].
+The current technical step is the Project Freeze document.
 processMessage() is transport-agnostic and does not know about
 Messenger payloads, Send API details, the Web/Internal HTTP endpoint,
 or the /web-chat static UI route.
@@ -154,16 +155,21 @@ not a fully pure reducer in the academic sense, but acceptable for MVP.
 
 Current file structure (active project folder: E:\Majstor_BL\Majstor_BL_Gpt):
 
-src/app.js -- Express app, route logic, session state, processMessage(),
-sendMessengerReply(), sendMessengerQuickReply(),
+src/app.js -- Express app, core session state, processMessage(),
+Messenger webhook/routes, sendMessengerReply(), sendMessengerQuickReply(),
 buildMessengerSessionKey(), extractMessengerInput(),
-sendMessengerChannelReply(), CHANNEL_WEB, POST /channels/web/message,
-GET /web-chat, buildSessionKey(), handleIncomingText(), and test
-re-exports. Imports buildTechnicianEmail() and sendSummaryEmail()
-from src/email.js.
+sendMessengerChannelReply(), CHANNEL_WEB, buildSessionKey(),
+handleIncomingText(), /next, /reset, and test re-exports.
+Imports buildTechnicianEmail() and sendSummaryEmail() from src/email.js.
+Imports registerWebRoutes() from src/web.js and wires Web routes through it.
 src/email.js -- Email notification module extracted in [8a].
 Contains buildTechnicianEmail(session) and sendSummaryEmail(session).
 Uses Brevo HTTP API through native fetch. No new dependencies.
+src/web.js -- Web routes module extracted in [8b].
+Contains registerWebRoutes(app, { handleIncomingText, CHANNEL_WEB }).
+Registers POST /channels/web/message and GET /web-chat.
+Uses Node built-in path only for serving public/web-chat.html.
+No behavior change, no photo upload, no auth, no AI, no CRM.
 src/server.js -- Only starts the server, imports app from app.js
 public/web-chat.html -- Minimal Web Chat / Test UI [7d]
 package.json -- Project config (no nodemailer -- uses native fetch)
@@ -186,6 +192,8 @@ Entry point: src/server.js (package.json -> "start": "node src/server.js")
 Deployed at: Render.com (auto-deploy from GitHub)
 
 Git log (latest known):
+206b515 Extract web routes module
+db41cbb Update CLAUDE.md after email module extraction
 0afa243 Extract email module
 539a004 Update CLAUDE.md after minimal Web Chat test UI
 2f44fc1 Add minimal Web Chat test UI
@@ -220,10 +228,10 @@ Current channels:
 - Minimal Web Chat / Test UI [LIVE FOR INTERNAL BROWSER TESTING -- [7d] DONE]
 
 Current technical step:
-[8b] Extract web routes/module -- no behavior change
+Project Freeze document after [8b]
 
 Current documentation status:
-CLAUDE.md updated after [8a] email module extraction
+CLAUDE.md updated after [8b] web routes/module extraction
 
 NOT next:
 
@@ -233,6 +241,10 @@ NOT next:
 - Instagram
 - Web photo upload unless explicitly scoped as a separate future task
 - Google Sheets / CRM logging (optional, not prioritised)
+
+Web photo upload support is planned only as a future optional scoped task.
+It is not part of the current freeze and must not be implemented unless
+explicitly requested later.
 
 Meta App Review status: PAUSED, not abandoned.
 Reason: Meta account restriction (advertising/business restriction
@@ -251,7 +263,7 @@ Messenger bot remains:
 - foundation for the AKiPP multi-channel architecture
 
 ================================================================
-SECTION 5 -- CURRENT CODE STATE (src/app.js)
+SECTION 5 -- CURRENT CODE STATE / MODULES
 ================================================================
 
 CORE / SHARED:
@@ -375,6 +387,8 @@ WEB/INTERNAL CHANNEL API (Task [7c]) DONE / LIVE FOR INTERNAL TEXT TESTING:
   Returns JSON: { "reply": "<bot reply string>" }.
   Uses web:<userId> session keys, isolated from messenger:<userId>
   and test:<userId>.
+  Since [8b], this route is physically registered through src/web.js via
+  registerWebRoutes(), not inline in src/app.js.
 
 - [7c] endpoint limitations / scope:
   Text-only.
@@ -394,6 +408,8 @@ MINIMAL WEB CHAT / TEST UI (Task [7d]) DONE / LIVE FOR INTERNAL BROWSER TESTING:
 
 - GET /web-chat [7d]
   Serves public/web-chat.html using res.sendFile(...).
+  Since [8b], this route is physically registered through src/web.js via
+  registerWebRoutes(), not inline in src/app.js.
   Uses Node built-in path import for safe file path resolution.
   Route is a static UI wrapper only. It does not call or modify
   processMessage(), DEVICES flow, INSTALLATIONS flow, Messenger logic,
@@ -439,6 +455,26 @@ MINIMAL WEB CHAT / TEST UI (Task [7d]) DONE / LIVE FOR INTERNAL BROWSER TESTING:
   not be treated as a hardened public production widget. Token/auth,
   rate limiting, public hardening, and web photo upload are future
   separately scoped concerns only.
+
+WEB ROUTES MODULE EXTRACTION (Task [8b]) DONE:
+
+- src/web.js was created as a Web routes module.
+- registerWebRoutes(app, { handleIncomingText, CHANNEL_WEB }) registers:
+  POST /channels/web/message
+  GET /web-chat
+- src/app.js imports registerWebRoutes from ./web and wires the routes with:
+  registerWebRoutes(app, { handleIncomingText, CHANNEL_WEB });
+- CHANNEL_WEB remains defined and exported in src/app.js for existing tests.
+- path moved from src/app.js to src/web.js because only GET /web-chat needs it.
+- Behavior unchanged:
+  same endpoint paths,
+  same validation,
+  same HTTP 400 error JSON,
+  same handleIncomingText({ channel: CHANNEL_WEB, userId, text }) call,
+  same { reply } JSON response,
+  same public/web-chat.html effective path.
+- No photo upload, no auth, no rate limiting, no AI, no CRM.
+- DEVICES, INSTALLATIONS, Messenger, /next, /reset and email behavior unchanged.
 
 EMAIL NOTIFICATION (Task [5]) DONE / PRODUCTION VERIFIED
 
@@ -649,9 +685,20 @@ Result:
   not as an active bug.
   Result: [8a] production smoke test -- PASS
 
+Production / Render smoke test after [8b] deploy:
+Result:
+
+- Web channel works through /web-chat.
+- DEVICES flow works through the Web UI after web routes extraction.
+- Email summary is delivered after completed Web request.
+- src/web.js route extraction is production-confirmed.
+- No rollback, no hotfix.
+  Result: [8b] production/web smoke test -- PASS
+
 MANDATORY -- run ALL before any commit:
 node --check src/app.js
 node --check src/email.js
+node --check src/web.js
 node test-email-builder.js
 node test-installations-keywords.js
 node test-installations-keywords-v2.js
@@ -688,6 +735,10 @@ GET /web-chat serves the browser UI from public/web-chat.html.
 The UI calls POST /channels/web/message via same-origin fetch.
 The UI is text-only and does not upload photos or videos.
 
+POST /channels/web/message and GET /web-chat are registered through
+src/web.js via registerWebRoutes(). src/app.js wires them with
+registerWebRoutes(app, { handleIncomingText, CHANNEL_WEB }).
+
 GET /next and GET /reset are temporary testing endpoints.
 Core Messenger production flow runs through POST /webhook.
 Web/Internal internal text testing runs through POST /channels/web/message.
@@ -708,6 +759,9 @@ module.exports.CHANNEL_WEB -- Web/Internal channel constant
 src/email.js exports directly:
 buildTechnicianEmail -- pure function
 sendSummaryEmail -- Brevo HTTP email sender
+
+src/web.js exports directly:
+registerWebRoutes -- registers Web/Internal API and Web Chat UI routes
 
 ================================================================
 SECTION 8 -- TOP-LEVEL ROUTING
@@ -828,6 +882,7 @@ Hosting: Render.com (auto-deploy from GitHub) LIVE
 Email: Brevo HTTP API
 (POST https://api.brevo.com/v3/smtp/email)
 Email transport module: src/email.js [8a]
+Web/Internal API + Web Chat route module: src/web.js [8b]
 nodemailer: ABANDONED -- SMTP unreliable on Render
 (IPv6 ENETUNREACH on ports 465/587;
 STARTTLS/IPv4fix also timed out)
@@ -977,6 +1032,15 @@ SECTION 14 -- DEVELOPMENT DECISIONS
     from ./email and preserves module.exports.buildTechnicianEmail for existing
     tests. Brevo payload, env vars, non-blocking behavior, and emailSent
     semantics remain unchanged.
+68. Web routes module extraction [8b]
+    POST /channels/web/message and GET /web-chat were moved from
+    src/app.js into src/web.js with no behavior change.
+    src/app.js imports registerWebRoutes() from ./web and wires the
+    routes with handleIncomingText and CHANNEL_WEB.
+    CHANNEL_WEB remains in src/app.js and stays exported for tests.
+    path moved to src/web.js because only /web-chat needs it.
+    DEVICES, INSTALLATIONS, Messenger, /next, /reset and email behavior
+    remain unchanged.
 
 Future vision:
 
@@ -1110,17 +1174,26 @@ Email delivered after repeat test; one transient Brevo 500 invalid_request
 was observed once after deploy, then retry succeeded and Gmail delivery
 completed after about 5 minutes.
 
-[8b] Extract web routes/module <- CURRENT / NEXT
-No behavior change.
-Target: extract POST /channels/web/message and GET /web-chat into a web
-routes/module.
-Do not add photo upload, auth, AI, CRM, or bot behavior changes.
+[8b] Extract web routes/module DONE
+Commit: 206b515 Extract web routes module
+Created src/web.js.
+Moved POST /channels/web/message and GET /web-chat route registration out of src/app.js.
+src/web.js exports registerWebRoutes(app, { handleIncomingText, CHANNEL_WEB }).
+src/app.js imports registerWebRoutes from ./web and wires Web routes through it.
+CHANNEL_WEB remains defined/exported in src/app.js for tests.
+No behavior change. DEVICES, INSTALLATIONS, Messenger, /next, /reset and email unchanged.
+Full suite: 249/249 PASS.
+Production/Web smoke test: PASS.
+Web DEVICES flow confirmed through /web-chat and email delivery confirmed.
 
-Project Freeze document <- AFTER [8b], unless user explicitly changes plan
+Project Freeze document <- CURRENT / NEXT
+Next project step, unless user explicitly changes plan.
 
 Web photo upload support <- FUTURE / OPTIONAL / separate scope
 Only if explicitly requested. Remains future/separate scope after freeze
-or after vacation.
+or after vacation. A scoped prompt for this future task may be prepared before
+the freeze document, but implementation remains future/separate and must not
+be started unless explicitly requested.
 
 [8] Google Sheets / CRM lead logging <- OPTIONAL
 One row per completed session.
@@ -1131,12 +1204,13 @@ Implement AFTER real production usage across channels.
 Real user data reveals what AI actually needs to improve.
 Do NOT start this before having multi-channel data.
 
-Current state after [8a]:
-Email notification logic has been structurally extracted into src/email.js
-with no behavior change. Current technical next step is [8b] Extract web
-routes/module -- no behavior change. Future optional work: Web photo upload
-support, public hardening/auth/rate limiting, CRM logging, and AI layer --
-only if explicitly scoped later.
+Current state after [8b]:
+Email notification logic is isolated in src/email.js.
+Web route registration for POST /channels/web/message and GET /web-chat is isolated in src/web.js.
+src/app.js remains the main Express app and core chatbot/Messenger module.
+Current technical next step is Project Freeze document.
+Future optional work: Web photo upload support, public hardening/auth/rate limiting,
+CRM logging, and AI layer -- only if explicitly scoped later.
 
 ================================================================
 NOTES FOR CLAUDE CODE
@@ -1151,9 +1225,11 @@ NOTES FOR CLAUDE CODE
 - Active project folder: E:\Majstor_BL\Majstor_BL_Gpt
 - Entry point for logic: src/app.js
 - Email notification logic: src/email.js
+- Web routes module: src/web.js
+- src/web.js exports registerWebRoutes().
+- POST /channels/web/message and GET /web-chat are registered through src/web.js.
 - Entry point for server: src/server.js
 - Minimal Web UI file: public/web-chat.html
-- Email module: src/email.js
 - Flow specs:
   MAJSTOR_BL_DEVICES_FLOW_v2.md (DEVICES)
   MAJSTOR_BL_INSTALLATIONS_FLOW_v2.md (INSTALLATIONS)
@@ -1171,13 +1247,17 @@ NOTES FOR CLAUDE CODE
   NO localhost:3000 dev server required)
 - ALWAYS run ALL nine suites before committing.
 - ALWAYS include node --check src/email.js in mandatory checks.
+- ALWAYS include node --check src/web.js in mandatory checks.
 - ALWAYS Ctrl+S before git add/commit/push.
 - Do NOT touch DEVICES flow unless explicitly asked.
 - Do NOT touch INSTALLATIONS flow unless explicitly asked.
 - Do NOT touch email functions unless explicitly asked.
 - Do NOT touch src/email.js unless explicitly scoped.
+- Do NOT touch src/web.js unless explicitly scoped.
 - If email code is touched, run node --check src/email.js and
   test-email-builder.js.
+- If web route code is touched, run node --check src/web.js,
+  test-web-channel.js and test-web-ui.js.
 - Do NOT add/stage/commit privacy-policy.html unless explicitly instructed.
 - Do NOT add/stage/commit old untracked chat summary files unless
   explicitly instructed.
@@ -1185,8 +1265,8 @@ NOTES FOR CLAUDE CODE
   After implementation and tests, only report what should be documented.
 - Do NOT add new states to processMessage() without mapping them in
   continueInstallationsFlow() or the DEVICES state machine.
-- AKiPP current / next technical step is [8b] Extract web routes/module
-  -- no behavior change; not AI, not Viber, not WhatsApp.
+- AKiPP current / next technical step is Project Freeze document after [8b];
+  not AI, not Viber, not WhatsApp, not Web photo upload implementation.
 - Do NOT add photo upload to Web UI unless explicitly scoped.
 - Do NOT turn /web-chat into a public production widget unless explicitly
   scoped. Web UI is currently internal/test-oriented.

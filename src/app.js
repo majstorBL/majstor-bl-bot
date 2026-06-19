@@ -1,10 +1,13 @@
 const express = require("express");
 const https = require("https"); // built-in Node.js module — no install needed
-const path = require("path"); // built-in Node.js module — no install needed
 // [8a] Email logic extracted into src/email.js. These names stay in app.js
 // scope via this require, so existing call sites (sendSummaryEmail(session))
 // and the module.exports.buildTechnicianEmail re-export remain unchanged.
 const { buildTechnicianEmail, sendSummaryEmail } = require("./email");
+// [8b] Web channel routes extracted into src/web.js. registerWebRoutes() wires
+// POST /channels/web/message and GET /web-chat onto the app. The "path" module
+// moved with /web-chat into src/web.js (only that route needed it).
+const { registerWebRoutes } = require("./web");
 const app = express();
 
 // Multi-user session store — each user gets their own session object
@@ -2767,43 +2770,13 @@ app.post("/webhook", (req, res) => {
   res.status(200).send("EVENT_RECEIVED");
 });
 
+// ── Web channel routes (Tasks [7c] + [7d], extracted in [8b]) ──────────────
+// POST /channels/web/message and GET /web-chat now live in src/web.js. They are
+// wired here with the same dependencies they used inline before; behavior is
+// identical — pure structural extraction, no user-facing change.
+registerWebRoutes(app, { handleIncomingText, CHANNEL_WEB });
+
 // ── Testing routes (browser-based, temporary) ─────────────────────────────
-// ── Web/Internal Channel API (Task [7c]) ────────────────────────────────────
-// Minimal text-only HTTP endpoint for the Web/Internal channel. It is a thin
-// transport adapter only: it validates the JSON body, delegates to the same
-// channel-agnostic handleIncomingText() wrapper the Messenger webhook and the
-// /next test endpoint use, and returns the bot reply as JSON. No photo/file
-// upload, no Quick Reply, no AI, no scheduling, no pricing — those are not part
-// of this task. Web sessions are isolated as "web:<userId>" via the channel
-// passed to handleIncomingText() (CHANNEL_WEB), so they never collide with
-// Messenger or test sessions sharing the same raw id.
-app.post("/channels/web/message", (req, res) => {
-  const body = req.body || {};
-  const { userId, text } = body;
-
-  // Validation: userId must be a non-empty string, text must be a string.
-  // Errors are returned as simple, consistent JSON — never raw thrown errors.
-  if (typeof userId !== "string" || userId.trim() === "") {
-    return res.status(400).json({ error: "userId and text are required" });
-  }
-  if (typeof text !== "string") {
-    return res.status(400).json({ error: "userId and text are required" });
-  }
-
-  const reply = handleIncomingText({ channel: CHANNEL_WEB, userId, text });
-  return res.json({ reply });
-});
-
-// ── Minimal Web Chat / Test UI (Task [7d]) ─────────────────────────────────
-// Serves a single static HTML page that lets the owner test the existing bot
-// flow in a browser. The page itself uses same-origin fetch() to the existing
-// POST /channels/web/message endpoint ([7c]). This route ONLY serves a file —
-// it does not touch processMessage(), sessions, DEVICES/INSTALLATIONS flows,
-// Messenger, or email. Text-only: no photo/video upload, no AI, no auth.
-app.get("/web-chat", (req, res) => {
-  res.sendFile(path.join(__dirname, "..", "public", "web-chat.html"));
-});
-
 app.get("/next", (req, res) => {
   if (req.url === "/favicon.ico") return res.end();
 

@@ -1,7 +1,8 @@
 ================================================================
 MAJSTOR BANJA LUKA / AKiPP — CHATBOT + LEAD INTAKE SYSTEM
 Master Context Document for Claude Code
-Last updated: June 2026 (Task [7d] Minimal Web Chat / Test UI ✅ DONE)
+Last updated: June 2026 (Task [8a] Extract email module ✅ DONE)
+(Task [7d] Minimal Web Chat / Test UI ✅ DONE)
 (Task [7c] Web/Internal Channel API MVP ✅ DONE)
 (Task [7b] Channel Transport Adapter Foundation ✅ DONE)
 (Task [7a] Channel Adapter Foundation ✅ DONE)
@@ -50,8 +51,8 @@ Web/Internal API endpoint: implemented and live for internal text-only testing
 Minimal Web Chat / Test UI: implemented and live for internal browser testing
 Strategic product direction: AKiPP — channel-agnostic communication and
 data collection system
-Current documentation step: [7e] CLAUDE.md update / Web UI documentation
-after [7d]
+Current technical step: [8b] Extract web routes/module — no behavior change
+Current documentation status: CLAUDE.md updated after [8a] email module extraction
 Future optional step: Web photo upload support only if explicitly scoped later
 
 ================================================================
@@ -90,24 +91,24 @@ Client -> FB Messenger -> POST /webhook
 Completed request:
 
 processMessage()
--> buildTechnicianEmail()
--> sendSummaryEmail()
+-> sendSummaryEmail(session) [imported from src/email.js]
+-> buildTechnicianEmail(session) [src/email.js]
 -> Brevo HTTP API
 -> Gmail / technician inbox
 
 AKiPP current / target architecture:
 
 Client
--> Channel Transport Adapter
+  -> Channel Transport Adapter
 
-   - messenger adapter [LIVE -- [7b] DONE]
-   - web/internal API adapter [LIVE FOR INTERNAL TEXT TESTING -- [7c] DONE]
-   - minimal web chat/test UI [LIVE FOR INTERNAL BROWSER TESTING -- [7d] DONE]
-   - future: Viber / WhatsApp / Instagram
--> handleIncomingText({ channel, userId, text })
--> processMessage(sessionKey, text)
--> Channel Transport Adapter reply
--> Client
+     - messenger adapter [LIVE -- [7b] DONE]
+     - web/internal API adapter [LIVE FOR INTERNAL TEXT TESTING -- [7c] DONE]
+     - minimal web chat/test UI [LIVE FOR INTERNAL BROWSER TESTING -- [7d] DONE]
+     - future: Viber / WhatsApp / Instagram
+  -> handleIncomingText({ channel, userId, text })
+  -> processMessage(sessionKey, text)
+  -> Channel Transport Adapter reply
+  -> Client
 
 Web/Internal flow (Task [7c]):
 
@@ -141,9 +142,10 @@ POST /channels/web/message endpoint. It does not add or change bot behavior.
 Key principles:
 "Transport First, Intelligence Later."
 AI layer remains future work -- not the next step.
-The raw Web/Internal API endpoint is DONE in [7c], and the minimal
-Web Chat / Test UI is DONE in [7d]. The current documentation step is
-[7e] CLAUDE.md update / Web UI documentation after [7d].
+The raw Web/Internal API endpoint is DONE in [7c], the minimal
+Web Chat / Test UI is DONE in [7d], and the email module extraction is
+DONE in [8a]. The current technical step is [8b] Extract web
+routes/module -- no behavior change.
 processMessage() is transport-agnostic and does not know about
 Messenger payloads, Send API details, the Web/Internal HTTP endpoint,
 or the /web-chat static UI route.
@@ -152,14 +154,16 @@ not a fully pure reducer in the academic sense, but acceptable for MVP.
 
 Current file structure (active project folder: E:\Majstor_BL\Majstor_BL_Gpt):
 
-src/app.js -- Express app, all route logic, session state,
-processMessage(), sendMessengerReply(),
-sendMessengerQuickReply(),
+src/app.js -- Express app, route logic, session state, processMessage(),
+sendMessengerReply(), sendMessengerQuickReply(),
 buildMessengerSessionKey(), extractMessengerInput(),
-sendMessengerChannelReply(),
-CHANNEL_WEB, POST /channels/web/message, GET /web-chat,
-buildTechnicianEmail(), sendSummaryEmail(),
-buildSessionKey(), handleIncomingText()
+sendMessengerChannelReply(), CHANNEL_WEB, POST /channels/web/message,
+GET /web-chat, buildSessionKey(), handleIncomingText(), and test
+re-exports. Imports buildTechnicianEmail() and sendSummaryEmail()
+from src/email.js.
+src/email.js -- Email notification module extracted in [8a].
+Contains buildTechnicianEmail(session) and sendSummaryEmail(session).
+Uses Brevo HTTP API through native fetch. No new dependencies.
 src/server.js -- Only starts the server, imports app from app.js
 public/web-chat.html -- Minimal Web Chat / Test UI [7d]
 package.json -- Project config (no nodemailer -- uses native fetch)
@@ -182,16 +186,16 @@ Entry point: src/server.js (package.json -> "start": "node src/server.js")
 Deployed at: Render.com (auto-deploy from GitHub)
 
 Git log (latest known):
+0afa243 Extract email module
+539a004 Update CLAUDE.md after minimal Web Chat test UI
 2f44fc1 Add minimal Web Chat test UI
+3404d7e Update CLAUDE.md after Web internal channel API MVP
 d9133f9 Add Web internal channel API MVP
 5b73aee Update CLAUDE.md after Task 7b
 315b6c7 Add Messenger transport adapter foundation
 97ce19b Update CLAUDE.md for AKiPP roadmap
 7eacabf Restore Messenger reset after channel adapter
 ac8d210 Add channel adapter foundation (Task 7a)
-55f9a73 Replace Gmail SMTP with Brevo HTTP Email API
-90a5cc1 Polish DEVICES flow and add regression suite
-931284b INSTALLATIONS v2 final keyword matrix fix
 
 ================================================================
 SECTION 4 -- AKiPP DIRECTION
@@ -215,8 +219,11 @@ Current channels:
 - Web/Internal API endpoint [LIVE FOR INTERNAL TEXT TESTING -- [7c] DONE]
 - Minimal Web Chat / Test UI [LIVE FOR INTERNAL BROWSER TESTING -- [7d] DONE]
 
-Current / next documentation step:
-[7e] CLAUDE.md update / Web UI documentation after [7d]
+Current technical step:
+[8b] Extract web routes/module -- no behavior change
+
+Current documentation status:
+CLAUDE.md updated after [8a] email module extraction
 
 NOT next:
 
@@ -433,19 +440,31 @@ MINIMAL WEB CHAT / TEST UI (Task [7d]) DONE / LIVE FOR INTERNAL BROWSER TESTING:
   rate limiting, public hardening, and web photo upload are future
   separately scoped concerns only.
 
-EMAIL NOTIFICATION (Task [5]) DONE / PRODUCTION VERIFIED:
+EMAIL NOTIFICATION (Task [5]) DONE / PRODUCTION VERIFIED
 
-- buildTechnicianEmail(session) -- pure function, returns {subject, text}
-  Exported via module.exports for isolated unit testing.
+- EMAIL MODULE EXTRACTION (Task [8a]) DONE:
+
+* Task [8a] was a structural extraction only. No email behavior change.
+
+* buildTechnicianEmail(session) -- pure function, returns {subject, text}
+  Now lives in src/email.js.
+  src/app.js imports it from ./email and preserves
+  module.exports.buildTechnicianEmail for existing tests.
+  src/email.js also exports it directly.
   Subject: "[NOVI ZAHTJEV] BRANCH -- detail -- location"
   Body: three sections:
   --- PODACI O ZAHTJEVU ---
   --- KONTAKT ---
   --- FOTOGRAFIJE ---
   Guard: Array.isArray(session.summaryNotes) for old sessions.
+  Guard: Array.isArray(session.photos) for photo list safety.
   Does not touch network or session state.
 
-- sendSummaryEmail(session) -- async, NON-BLOCKING, SAFE, IDEMPOTENT
+* sendSummaryEmail(session) -- async, NON-BLOCKING, SAFE, IDEMPOTENT
+  Now lives in src/email.js.
+  src/app.js imports it from ./email.
+  Existing call sites in processMessage() remain unchanged:
+  sendSummaryEmail(session);
   Called without await -- never delays user-facing reply.
   Skips silently if env vars missing.
   Uses Node built-in fetch().
@@ -453,12 +472,14 @@ EMAIL NOTIFICATION (Task [5]) DONE / PRODUCTION VERIFIED:
   Sets session.emailSent = true only after response.ok.
   Never throws -- all errors caught locally, never surface to user.
 
-- Email transport: Brevo HTTP API
+* Email transport: Brevo HTTP API
   SMTP abandoned: IPv6 ENETUNREACH on Render ports 465/587.
   DNS ipv4first workaround still timed out.
   Brevo HTTP API over HTTPS 443 reliable on Render.
-  Transport isolated in sendSummaryEmail() -- swappable without
-  touching flow logic.
+  Transport isolated in src/email.js -- swappable without touching
+  flow logic.
+
+* src/email.js exports buildTechnicianEmail and sendSummaryEmail directly.
 
 DEVICES BRANCH (Branch A) -- v2 + [4d-UX] polish DONE / STABLE:
 
@@ -612,8 +633,25 @@ Result:
   "Dalje". This is expected for [7d].
   Result: [7d] Render/browser smoke test -- PASS
 
+Production / Render smoke test after [8a] deploy:
+Result:
+
+- Web flow works.
+- Render deploy works.
+- sendSummaryEmail() is triggered from the extracted src/email.js module.
+- One transient Brevo API 500 invalid_request was observed immediately
+  after deploy.
+- Repeat test passed.
+- Render log showed: "Technician email notification sent."
+- Email arrived in Gmail with about a 5 minute delay.
+- Conclusion: no rollback, no hotfix; [8a] is production-confirmed.
+  Treat the one Brevo 500 invalid_request as a smoke-test note only,
+  not as an active bug.
+  Result: [8a] production smoke test -- PASS
+
 MANDATORY -- run ALL before any commit:
 node --check src/app.js
+node --check src/email.js
 node test-email-builder.js
 node test-installations-keywords.js
 node test-installations-keywords-v2.js
@@ -656,7 +694,8 @@ Web/Internal internal text testing runs through POST /channels/web/message.
 Minimal Web browser testing runs through GET /web-chat.
 
 module.exports exposes for testing:
-module.exports.buildTechnicianEmail -- pure function
+module.exports.buildTechnicianEmail -- re-export from src/email.js for
+backwards-compatible tests
 module.exports.createSession -- session factory
 module.exports.isContinueAnswer -- Quick Reply "Dalje" detector
 module.exports.buildSessionKey -- channel-aware session key
@@ -665,6 +704,10 @@ module.exports.CHANNEL_MESSENGER -- Messenger channel constant
 module.exports.buildMessengerSessionKey -- Messenger session-key helper
 module.exports.extractMessengerInput -- Messenger input extractor
 module.exports.CHANNEL_WEB -- Web/Internal channel constant
+
+src/email.js exports directly:
+buildTechnicianEmail -- pure function
+sendSummaryEmail -- Brevo HTTP email sender
 
 ================================================================
 SECTION 8 -- TOP-LEVEL ROUTING
@@ -784,6 +827,7 @@ Version ctrl: Git (local) + GitHub (remote)
 Hosting: Render.com (auto-deploy from GitHub) LIVE
 Email: Brevo HTTP API
 (POST https://api.brevo.com/v3/smtp/email)
+Email transport module: src/email.js [8a]
 nodemailer: ABANDONED -- SMTP unreliable on Render
 (IPv6 ENETUNREACH on ports 465/587;
 STARTTLS/IPv4fix also timed out)
@@ -805,7 +849,7 @@ PAGE_ACCESS_TOKEN -- Meta page token for Send API
 BREVO_API_KEY -- Brevo email API key
 EMAIL_FROM -- sender address (majstor.banjaluka@gmail.com)
 EMAIL_TO -- technician's address
-EMAIL_FROM_NAME -- sender display name ("Majstor Banjaluka")
+EMAIL_FROM_NAME -- sender display name ("Majstor Banja Luka")
 
 OBSOLETE env vars -- delete from Render if still present:
 EMAIL_USER -- was for Gmail SMTP, no longer used
@@ -863,7 +907,8 @@ SECTION 14 -- DEVELOPMENT DECISIONS
 42. summaryNotes[] and emailSent initialized in createSession()
 43. Email transport = Brevo HTTP API, not Gmail SMTP
 44. sendSummaryEmail() is non-blocking (no await at call site)
-45. buildTechnicianEmail() is a pure function exported for unit testing
+45. buildTechnicianEmail() is a pure function in src/email.js and
+    re-exported from src/app.js for unit testing
 46. emailSent = true only after response.ok -- failed sends can retry
 47. buildSessionKey(channel, userId) -> "channel:userId" [7a]
     Prevents session key collisions across future channels.
@@ -926,6 +971,12 @@ SECTION 14 -- DEVELOPMENT DECISIONS
     /web-chat is internal/test-oriented and unauthenticated. Do not treat it
     as a hardened public production widget. Token/auth/rate limiting and
     public hardening are future separately scoped concerns.
+67. Email module extraction [8a]
+    buildTechnicianEmail(session) and sendSummaryEmail(session) were moved from
+    src/app.js into src/email.js with no behavior change. src/app.js imports them
+    from ./email and preserves module.exports.buildTechnicianEmail for existing
+    tests. Brevo payload, env vars, non-blocking behavior, and emailSent
+    semantics remain unchanged.
 
 Future vision:
 
@@ -1040,14 +1091,36 @@ Render/browser smoke test: PASS
 Known limitation: text-only Web UI; at photo step, type "Dalje".
 This limitation is expected and accepted for [7d].
 
-[7e] CLAUDE.md update / Web UI documentation after [7d] <- CURRENT / NEXT
+[7e] CLAUDE.md update / Web UI documentation after [7d] DONE
+Commit: 539a004 Update CLAUDE.md after minimal Web Chat test UI
 Documentation-only update after completed [7d].
-Manual Render/browser smoke test after [7d] has already passed.
-Do not mark [7e] DONE until the documentation update is reviewed and committed.
-Do not start AI, public hardening, authentication, or photo upload here.
+Manual Render/browser smoke test after [7d] had already passed.
+No AI, public hardening, authentication, or photo upload added.
+
+[8a] Extract email module DONE
+Commit: 0afa243 Extract email module
+Created src/email.js.
+Moved buildTechnicianEmail(session) and sendSummaryEmail(session) out of src/app.js.
+src/app.js imports both from ./email.
+Existing buildTechnicianEmail re-export preserved for tests.
+No behavior change. DEVICES, INSTALLATIONS, Messenger, Web API and /web-chat unchanged.
+Full suite: 249/249 PASS.
+Production smoke test: PASS.
+Email delivered after repeat test; one transient Brevo 500 invalid_request
+was observed once after deploy, then retry succeeded and Gmail delivery
+completed after about 5 minutes.
+
+[8b] Extract web routes/module <- CURRENT / NEXT
+No behavior change.
+Target: extract POST /channels/web/message and GET /web-chat into a web
+routes/module.
+Do not add photo upload, auth, AI, CRM, or bot behavior changes.
+
+Project Freeze document <- AFTER [8b], unless user explicitly changes plan
 
 Web photo upload support <- FUTURE / OPTIONAL / separate scope
-Only if explicitly requested. Do not move ahead of documentation by default.
+Only if explicitly requested. Remains future/separate scope after freeze
+or after vacation.
 
 [8] Google Sheets / CRM lead logging <- OPTIONAL
 One row per completed session.
@@ -1058,12 +1131,12 @@ Implement AFTER real production usage across channels.
 Real user data reveals what AI actually needs to improve.
 Do NOT start this before having multi-channel data.
 
-Current state after [7d]:
-First practical Web browser test experience exists for internal testing.
-Immediate documentation step: [7e] CLAUDE.md update / Web UI documentation
-after [7d].
-Future optional work: Web photo upload support, public hardening/auth/rate
-limiting, CRM logging, and AI layer -- only if explicitly scoped later.
+Current state after [8a]:
+Email notification logic has been structurally extracted into src/email.js
+with no behavior change. Current technical next step is [8b] Extract web
+routes/module -- no behavior change. Future optional work: Web photo upload
+support, public hardening/auth/rate limiting, CRM logging, and AI layer --
+only if explicitly scoped later.
 
 ================================================================
 NOTES FOR CLAUDE CODE
@@ -1077,8 +1150,10 @@ NOTES FOR CLAUDE CODE
 - Write all code, comments, and docs in English.
 - Active project folder: E:\Majstor_BL\Majstor_BL_Gpt
 - Entry point for logic: src/app.js
+- Email notification logic: src/email.js
 - Entry point for server: src/server.js
 - Minimal Web UI file: public/web-chat.html
+- Email module: src/email.js
 - Flow specs:
   MAJSTOR_BL_DEVICES_FLOW_v2.md (DEVICES)
   MAJSTOR_BL_INSTALLATIONS_FLOW_v2.md (INSTALLATIONS)
@@ -1095,10 +1170,14 @@ NOTES FOR CLAUDE CODE
   test-web-ui.js (12 -- self-contained ephemeral HTTP server,
   NO localhost:3000 dev server required)
 - ALWAYS run ALL nine suites before committing.
+- ALWAYS include node --check src/email.js in mandatory checks.
 - ALWAYS Ctrl+S before git add/commit/push.
 - Do NOT touch DEVICES flow unless explicitly asked.
 - Do NOT touch INSTALLATIONS flow unless explicitly asked.
 - Do NOT touch email functions unless explicitly asked.
+- Do NOT touch src/email.js unless explicitly scoped.
+- If email code is touched, run node --check src/email.js and
+  test-email-builder.js.
 - Do NOT add/stage/commit privacy-policy.html unless explicitly instructed.
 - Do NOT add/stage/commit old untracked chat summary files unless
   explicitly instructed.
@@ -1106,8 +1185,8 @@ NOTES FOR CLAUDE CODE
   After implementation and tests, only report what should be documented.
 - Do NOT add new states to processMessage() without mapping them in
   continueInstallationsFlow() or the DEVICES state machine.
-- AKiPP current / next documentation step is [7e] CLAUDE.md update /
-  Web UI documentation after [7d] -- not AI, not Viber, not WhatsApp.
+- AKiPP current / next technical step is [8b] Extract web routes/module
+  -- no behavior change; not AI, not Viber, not WhatsApp.
 - Do NOT add photo upload to Web UI unless explicitly scoped.
 - Do NOT turn /web-chat into a public production widget unless explicitly
   scoped. Web UI is currently internal/test-oriented.
